@@ -199,6 +199,14 @@ curl -s -o /dev/null -w "%{http_code}\n" -H "X-API-Key: 你的key" localhost:808
 
 第一条应返回 `401`，第二条 `200`。管理台右上角填入同一个 key 即可（保存在浏览器 localStorage）。
 
+不确定服务端到底有没有开启鉴权，直接看健康检查：
+
+```bash
+curl -s localhost:8080/api/v1/health
+```
+
+返回里的 `"auth": "enabled"` 或 `"disabled"` 就是当前真实状态（key 只在进程启动时读取，改了必须重启）。
+
 需要注意：
 
 - 目前是**单个共享 key**，没有角色/权限区分，审计里的操作者来自请求体（如 `reviewer_id`），不是 key 身份。
@@ -322,7 +330,7 @@ make test
 make lint
 ```
 
-当前基线：**315 passed, 1 skipped**。跳过的是需要真实 PostgreSQL 的用例，配置后可开启：
+当前基线：**316 passed, 1 skipped**。跳过的是需要真实 PostgreSQL 的用例，配置后可开启：
 
 ```bash
 MAILMIND_TEST_PG_URL=postgresql+psycopg://user:pass@localhost:5432/mailmind_test make test

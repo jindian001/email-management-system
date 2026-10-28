@@ -31,6 +31,7 @@ def health(
         "llm_provider": settings.llm_provider,
         "auto_reply_mode": settings.auto_reply_send_mode,
         "storage": settings.storage_backend,
+        "auth": "enabled" if settings.api_key else "disabled",
     }
 
 
