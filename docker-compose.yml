@@ -33,6 +33,7 @@ services:
       MAILMIND_LLM_PROVIDER: ${MAILMIND_LLM_PROVIDER:-template}
       MAILMIND_LLM_API_KEY: ${MAILMIND_LLM_API_KEY:-}
       MAILMIND_AUTO_REPLY_SEND_MODE: review
+    command: ["sh", "-c", "alembic upgrade head && mailmind serve --host 0.0.0.0 --port 8080"]
     ports: ["8080:8080"]
     volumes: ["vardata:/app/var"]
     depends_on:

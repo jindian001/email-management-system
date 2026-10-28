@@ -1,10 +1,11 @@
 PY := .venv/bin/python
 PIP := uv pip install --python .venv/bin/python
 
-.PHONY: help venv install test lint fmt demo serve train clean
+.PHONY: help venv install migrate test lint fmt demo serve train clean
 
 help:
 	@echo "make install  - 创建 venv 并安装依赖"
+	@echo "make migrate  - 执行数据库迁移 (alembic upgrade head)"
 	@echo "make test     - 运行全部测试"
 	@echo "make lint     - ruff + mypy"
 	@echo "make demo     - 生成演示数据（SQLite）"
@@ -16,6 +17,9 @@ venv:
 
 install: venv
 	$(PIP) -e ".[dev]"
+
+migrate:
+	PYTHONPATH=src $(PY) -m alembic upgrade head
 
 test:
 	PYTHONPATH=src $(PY) -m pytest -q

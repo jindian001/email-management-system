@@ -8,6 +8,15 @@
 - 模型：纯 Python TF-IDF + 朴素贝叶斯（零依赖、确定性）+ 规则引擎 + LLM 复核与起草
 - 前端：无构建单页管理台（`/ui/`），直接调用 REST API
 
+## 数据库迁移
+
+```bash
+make migrate                                  # alembic upgrade head
+# 或直接： PYTHONPATH=src .venv/bin/python -m alembic upgrade head
+```
+
+初始迁移见 `migrations/versions/`，与 ORM 模型保持一致（有测试守护）。
+
 ## 快速开始
 
 ```bash
@@ -119,13 +128,14 @@ src/mailmind/
 ├── tasks/       Celery 应用与任务
 ├── api/         FastAPI 应用、依赖、路由
 └── static/      管理台单页
+migrations/      Alembic 迁移（alembic.ini 在仓库根目录）
 tests/           仅本地保留（不推送）
 ```
 
 ## 测试
 
 ```bash
-make test        # 223 passed
+make test        # 228 passed
 make lint        # ruff + mypy
 ```
 
