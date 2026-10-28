@@ -10,4 +10,5 @@
 6. **禁止提交**：`.venv/`、`var/`、`*.db`、`.env`、任何真实邮箱凭据。
 7. **安全底线**：邮箱密码/token 不得明文入库；自动回复必须默认走人工审核（`MAILMIND_AUTO_REPLY_SEND_MODE=review`）。
 8. **停止进程**：清理后台服务只能按自己记录的 PID（`kill $(cat pidfile)`），**禁止 `pkill -f` 宽匹配**——会误杀用户自己开着的服务。
-9. **文档规范**：所有面向用户的命令块**不得包含 `#` 注释**（行内或整行）。macOS 默认 zsh 未开启 `interactive_comments`，粘贴后 `#` 及其后内容会被当成参数，报 `unrecognized arguments`。说明文字放在代码块外。
+9. **禁止删除用户数据**：不得对 `var/`、`*.db`、`var/raw` 执行 `rm -rf`。需要干净库做验证时，用临时路径（例如 `MAILMIND_DATABASE_URL=sqlite+pysqlite:////tmp/mm-test.db`）。
+10. **文档规范**：所有面向用户的命令块**不得包含 `#` 注释**（行内或整行）。macOS 默认 zsh 未开启 `interactive_comments`，粘贴后 `#` 及其后内容会被当成参数，报 `unrecognized arguments`。说明文字放在代码块外。

@@ -398,3 +398,4 @@ docker compose up --build
 | sync 返回 400 | `provider=memory` 需要注入连接器；imap 账号要填 `config.imap_host` |
 | 回复没自动发 | 默认 `review` 模式，去「自动回复审核」点通过；或命中冷却/免打扰 |
 | 改了 `MAILMIND_SECRET_KEY` 后收不到信 | 旧凭据解不开，需重建账号或恢复原密钥 |
+| 账号/邮件突然不见了 | `var/` 是数据目录，被删/被清空就会回到初始状态；确认没人执行过 `rm -rf var`，必要时从备份恢复 |
