@@ -82,7 +82,7 @@ def mask_pii(text: str) -> tuple[str, list[dict]]:
     findings: list[dict] = []
     masked = text or ""
     for kind, pattern in _PII_PATTERNS:
-        def repl(match: re.Match[str]) -> str:
+        def repl(match: re.Match[str], kind: str = kind) -> str:
             findings.append({"kind": kind, "value": match.group(0)})
             return f"[{kind.upper()}]"
 

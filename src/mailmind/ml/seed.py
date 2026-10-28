@@ -1,0 +1,84 @@
+"""冷启动种子语料（exp.md 4.5.2）。
+
+没有标注数据时用它训练出一版可用的 L1 模型；真实数据接入后由 ``mailmind train`` 覆盖。
+"""
+
+from __future__ import annotations
+
+SPAM_SEED: list[str] = [
+    "恭喜您中奖了！立即点击链接领取 10000 元现金大奖，限时 24 小时有效。",
+    "您的账户存在异常登录，请立即验证身份否则将被冻结。",
+    "低价代开发票，增值税专用发票，全国通用，请联系。",
+    "限时秒杀，全场一折，点击 http://192.168.10.9/gift 立即抢购。",
+    "无抵押贷款，当天放款，额度高利息低，回复即可办理。",
+    "刷单兼职，日入五百，动动手指就能赚钱，加微信详聊。",
+    "Congratulations! You have won a free iPhone. Click here to claim now!",
+    "URGENT: Your account will be suspended. Verify your password immediately.",
+    "Buy cheap viagra online, no prescription needed, best price guaranteed.",
+    "You are invited to claim your risk-free trial, limited time offer, act now.",
+    "博彩娱乐城注册送彩金，首存百分百，稳赚不赔。",
+    "内部消息，明日涨停牛股，添加老师微信免费领取。",
+    "您的快递包裹异常，请点击链接补充地址信息并支付关税。",
+    "免费领取流量卡，关注公众号即可，先到先得。",
+    "低息借款，只需身份证，五分钟到账，无任何抵押。",
+    "优惠券大放送！全场满减，错过再等一年，退订请回复TD。",
+    "请注意：您的邮箱容量已满，点击链接扩容以避免邮件丢失。",
+    "投资理财高收益，年化百分之三十，名额有限速来。",
+]
+
+HAM_SEED: list[str] = [
+    "您好，关于上周的合同条款，我们内部讨论后希望将交付时间调整为月底，请确认。",
+    "附件是本月的对账单，请查收并在周五前回款，如有疑问随时联系财务部。",
+    "会议改到周四下午三点，地点在三楼会议室，请准时参加。",
+    "您好，我想咨询一下贵公司企业版的价格与部署方式，方便的话请安排一次沟通。",
+    "Hi team, the deployment is done. Please verify the dashboard and report any issue.",
+    "您好，我的订单还没有发货，麻烦帮忙查一下物流单号，订单号是 20241001。",
+    "关于您反馈的登录问题，我们已经修复，请重新尝试，感谢您的耐心等待。",
+    "下周一是公司年会，请大家在周五前提交报名信息，谢谢配合。",
+    "请查收附件中的发票，发票号已更新，金额与合同一致。",
+    "您好，请问你们的服务是否支持私有化部署？我们这边有数据合规要求。",
+    "面试安排在下周二上午十点，线上进行，链接稍后发送。",
+    "Could you please review the pull request when you have time? Thanks.",
+    "这份需求文档还需要补充测试用例，我们先在评审会上过一遍。",
+    "您好，设备已经收到，但外包装有破损，希望安排换货处理。",
+    "本季度销售数据已完成统计，详见附件表格，请各位主管确认。",
+    "The invoice you requested is attached. Let me know if you need anything else.",
+    "您好，麻烦确认一下合同盖章版是否已经寄出，我们这边在等。",
+    "系统将于本周六凌晨进行例行维护，届时服务可能短暂不可用。",
+]
+
+# (text, category)
+CATEGORY_SEED: list[tuple[str, str]] = [
+    ("您好，我想咨询企业版的价格与部署方式，方便安排一次沟通吗？", "consult"),
+    ("请问你们的产品支持私有化部署吗？我们有数据合规要求。", "consult"),
+    ("麻烦发一份产品介绍和报价单，谢谢。", "consult"),
+    ("我们想了解贵公司能否提供定制开发服务，周期大概是多久？", "consult"),
+    ("附件是本月对账单，请查收并在周五前完成回款。", "billing"),
+    ("请查收发票，金额与合同一致，发票号已更新。", "billing"),
+    ("上个季度的报销单据已经提交，请问什么时候能审批完成？", "billing"),
+    ("This is the invoice for last month, please process the payment.", "billing"),
+    ("公司将于本周六凌晨进行系统维护，届时服务可能短暂不可用。", "notice"),
+    ("年会报名截止到本周五，请大家及时提交信息。", "notice"),
+    ("办公区停水通知：周四上午九点至十二点。", "notice"),
+    ("系统升级公告：新版本将在今晚发布，请注意刷新页面。", "notice"),
+    ("限时优惠，全场八折，点击链接领取优惠券，退订请回复TD。", "marketing"),
+    ("双十一大促开始啦，满减叠加，错过再等一年。", "marketing"),
+    ("Subscribe to our newsletter and get the latest product updates.", "marketing"),
+    ("新品发布会邀请函，扫码报名参加。", "marketing"),
+    ("我通过了您的好友申请，欢迎在 LinkedIn 上关注我。", "social"),
+    ("周末一起吃饭吗？好久没见了。", "social"),
+    ("你的 GitHub 项目很有意思，可以交流一下吗？", "social"),
+    ("Thanks for connecting, let's keep in touch.", "social"),
+    ("项目周会纪要已更新到共享文档，请各位查阅。", "internal"),
+    ("请大家在周五前提交本周的工作周报。", "internal"),
+    ("内网权限申请已通过，请使用工号登录。", "internal"),
+    ("The deployment notes are in Confluence, please check.", "internal"),
+    ("我们这边在招后端工程师，方便帮忙内推一下简历吗？", "recruiting"),
+    ("面试安排在下周二上午十点，线上进行。", "recruiting"),
+    ("您好，这是我的简历，期望薪资 30k，期待您的回复。", "recruiting"),
+    ("We are hiring a data engineer, feel free to refer candidates.", "recruiting"),
+    ("我要投诉你们的产品质量太差，用了两天就坏了，售后也不理人。", "complaint"),
+    ("这次服务体验非常糟糕，希望给一个合理的解释和赔偿方案。", "complaint"),
+    ("你们的退款流程太慢了，已经等了三周还没有处理。", "complaint"),
+    ("I am very disappointed with the service and would like to file a complaint.", "complaint"),
+]

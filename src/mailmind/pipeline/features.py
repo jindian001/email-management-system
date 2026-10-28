@@ -8,13 +8,13 @@ from __future__ import annotations
 
 import re
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from mailmind.pipeline.normalize import (
     UrlInfo,
-    deobfuscate,
     dense_feature_hint,
+    deobfuscate,
     extract_urls,
     normalize_text,
 )
@@ -71,6 +71,7 @@ class FeatureBundle:
     subject: str = ""
     text: str = ""
     normalized_text: str = ""  # 反混淆后
+    headers: dict[str, str] = field(default_factory=dict)
     text_length: int = 0
     caps_ratio: float = 0.0
     exclamations: float = 0.0
@@ -102,6 +103,13 @@ def _domain_of(addr: str) -> str:
     return addr.rsplit("@", 1)[-1].lower() if addr and "@" in addr else ""
 
 
+def ensure_utc(value: datetime | None) -> datetime | None:
+    """SQLite 读回来的是 naive datetime，统一按 UTC 处理（exp.md 附录 C.2）。"""
+    if value is None:
+        return None
+    return value if value.tzinfo else value.replace(tzinfo=UTC)
+
+
 def _domain_of_header(value: str) -> str:
     match = re.search(r"[\w.+-]+@([\w.-]+)", value or "")
     return match.group(1).lower() if match else ""
@@ -112,7 +120,7 @@ def build_features(
     sender_stats: SenderStats | None = None,
     now: datetime | None = None,
 ) -> FeatureBundle:
-    now = now or datetime.now(timezone.utc)
+    now = now or datetime.now(UTC)
     stats = sender_stats or SenderStats()
 
     subject = normalize_text(parsed.subject)
@@ -167,11 +175,14 @@ def build_features(
         sender_seen=stats.seen_count,
         sender_spam_ratio=round(stats.spam_ratio, 4),
         sender_first_seen_hours=(
-            round((now - stats.first_seen).total_seconds() / 3600, 2) if stats.first_seen else None
+            round((now - ensure_utc(stats.first_seen)).total_seconds() / 3600, 2)
+            if stats.first_seen
+            else None
         ),
         subject=subject,
         text=body,
         normalized_text=deob,
+        headers=dict(parsed.headers),
         text_length=len(combined),
         caps_ratio=hints["caps_ratio"],
         exclamations=hints["exclamations"],

@@ -8,7 +8,7 @@ from __future__ import annotations
 import hashlib
 import re
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from email.header import decode_header, make_header
 from email.message import Message
 from email.parser import BytesParser
@@ -205,7 +205,7 @@ def _first_recipients(msg: Message, header: str) -> list[str]:
 
     values = msg.get_all(header) or []
     out: list[str] = []
-    for name, addr in getaddresses([str(v) for v in values]):
+    for _name, addr in getaddresses([str(v) for v in values]):
         if addr:
             out.append(addr)
     return out
@@ -255,9 +255,9 @@ def parse_message(raw: bytes) -> ParsedMail:
         try:
             sent_at = parsedate_to_datetime(date_header)
             if sent_at and sent_at.tzinfo is None:
-                sent_at = sent_at.replace(tzinfo=timezone.utc)
+                sent_at = sent_at.replace(tzinfo=UTC)
             if sent_at:
-                sent_at = sent_at.astimezone(timezone.utc)
+                sent_at = sent_at.astimezone(UTC)
         except Exception:  # noqa: BLE001
             warnings.append("bad_date")
 
