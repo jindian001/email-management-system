@@ -173,6 +173,40 @@ curl -s -X POST localhost:8080/api/v1/rules/test \
 | 回复没发出去 | 默认 review；或命中冷却/免打扰；或草稿被护栏拒绝（看邮件详情里的 `risk_flags`） |
 | 想换 `MAILMIND_SECRET_KEY` | 换后旧凭据解不开（日志 `credential_decrypt_failed`），需恢复旧 key 或用新 key 重录密码 |
 
+### 3.3 开启接口鉴权（可选）
+
+`MAILMIND_API_KEY` 是**接口层的共享密钥**（请求头 `X-API-Key`），与邮箱密码、LLM Key 都不是一回事。
+留空 = 不校验（仅适合本机开发）；只要服务对局域网/公网开放就应该设置。
+
+生成一个随机 key：
+
+```bash
+python3 -c "import secrets; print(secrets.token_urlsafe(24))"
+```
+
+写进 `.env`（或 export 环境变量）：
+
+```
+MAILMIND_API_KEY=刚才生成的那串
+```
+
+重启服务后验证：
+
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" localhost:8080/api/v1/mails
+curl -s -o /dev/null -w "%{http_code}\n" -H "X-API-Key: 你的key" localhost:8080/api/v1/mails
+```
+
+第一条应返回 `401`，第二条 `200`。管理台右上角填入同一个 key 即可（保存在浏览器 localStorage）。
+
+需要注意：
+
+- 目前是**单个共享 key**，没有角色/权限区分，审计里的操作者来自请求体（如 `reviewer_id`），不是 key 身份。
+- 轮换 = 改环境变量 + 重启，所有客户端（管理台、脚本）同步换新 key。
+- 启用前请确保走 HTTPS（反向代理终止即可），否则 key 明文传输。
+- 不需要 key 的路径：`/api/v1/health`（探针）、`/ui/**`（静态资源）、`/docs` 与 `/openapi.json`
+  （不想暴露接口结构就在反代里拦掉后两个）。
+
 ## 4. 打开自动发送（可选）
 
 ```bash
@@ -323,7 +357,8 @@ docker compose up --build
 | `llm-check` 报 401 | API Key 错误/过期，或该服务需要额外的鉴权头 |
 | `llm-check` 报 timeout / connection | `BASE_URL` 写错、本地模型没起、或需要代理 |
 | 报 `model not found` | `MAILMIND_LLM_MODEL` 与服务端实际模型名不一致（Ollama 要带 tag，如 `qwen2.5:7b`） |
-| 接口 401 | 配了 `MAILMIND_API_KEY`，请求带 `X-API-Key`（管理台右上角填写）|
+| 接口 401 | 配了 `MAILMIND_API_KEY`，请求要带 `X-API-Key`（管理台右上角填写），见 3.3 |
+| 管理台一直提示加载失败 401 | 后端开了鉴权但页面没填 key；填右上角输入框后会自动刷新 |
 | `/ui` 打不开 | 必须访问 `/ui/`（带尾斜杠）；没构建就先 `make web` |
 | sync 返回 400 | `provider=memory` 需要注入连接器；imap 账号要填 `config.imap_host` |
 | 回复没自动发 | 默认 `review` 模式，去「自动回复审核」点通过；或命中冷却/免打扰 |
