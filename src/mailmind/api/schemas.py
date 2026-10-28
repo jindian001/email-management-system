@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -25,6 +26,8 @@ class AccountOut(BaseModel):
     status: str
     last_uid: int
     uid_validity: int
+    last_synced_at: datetime | None = None
+    created_at: datetime | None = None
     config: dict[str, Any] = Field(default_factory=dict)
 
 

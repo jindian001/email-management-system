@@ -7,7 +7,7 @@
 - 接入：IMAP、Gmail API、Microsoft Graph（读取）；SMTP / Gmail API（发送）
 - 存储：PostgreSQL（生产）/ SQLite（测试）；对象存储支持本地目录、内存、S3/MinIO
 - 模型：纯 Python TF-IDF + 朴素贝叶斯（零依赖、确定性）+ 规则引擎 + LLM 复核与起草
-- 前端：无构建单页管理台（`/ui/`），直接调用 REST API
+- 前端：无构建管理台（`/ui/`，index.html + app.js + style.css），直接调用 REST API
 
 ## 数据库迁移
 
@@ -60,6 +60,22 @@ curl -s localhost:8080/api/v1/replies?status=pending_review
 curl -s -X POST localhost:8080/api/v1/replies/1/approve \
   -H 'Content-Type: application/json' -d '{"reviewer_id":"ops"}'
 ```
+
+## 管理台（`/ui/`）
+
+9 个页面，全部走真实 API，不需要前端构建：
+
+| 页面 | 能力 |
+|---|---|
+| 总览 | 邮件量/垃圾率/待审/隔离数，分类与判定分布条形图，最近邮件 |
+| 收件箱 | 搜索（主题/正文/发件人）、状态与类别过滤、游标分页、判定标签、一键 AI 起草 |
+| 邮件详情 | 正文、附件、判定分数与**命中原因**、分类得分、草稿状态、同会话列表、下载原始 EML |
+| 隔离区 | 放行并自动加白名单、删除、查看详情 |
+| 自动回复审核 | 改草稿 → 通过发送 / 拒绝，显示引用与风险标记 |
+| 账号 | 新建 IMAP/Gmail/Graph/演示账号（凭据加密）、同步、删除、同步时间 |
+| 规则 | 增删启停 + **规则试算**（输入一封邮件看判定与命中规则） |
+| 知识库 | 导入（自动切片）、检索测试、删除 |
+| 审计 / 反馈 | 审计动作过滤与详情 JSON、反馈样本列表（重训数据来源） |
 
 ## 核心设计
 
@@ -143,14 +159,15 @@ tests/           仅本地保留（不推送）
 ## 测试
 
 ```bash
-make test        # 283 passed, 1 skipped
+make test        # 293 passed, 1 skipped
 make lint        # ruff + mypy
 ```
 
 测试覆盖：解析/MIME/编码、归一化与 PII、特征、规则引擎、朴素贝叶斯、级联判定、分类、
 护栏、检索、放行策略（RFC 3834）、生成、发送、接入幂等与 UIDVALIDITY、API 全量、
 IMAP/SMTP/Gmail/Graph 协议解析（假 client 与 MockTransport）、任务函数、对象存储（含 S3 Stubber）、
-凭据加密、Redis 冷却与 API 限流、游标分页、Alembic 迁移一致性、PostgreSQL DDL 兼容性，以及一个
+凭据加密、Redis 冷却与 API 限流、游标分页、Alembic 迁移一致性、PostgreSQL DDL 兼容性、管理台静态契约
+（tab↔渲染函数、**前端调用 ↔ OpenAPI 路径一致性**、Node 语法校验），以及一个
 **召回率/误杀率验收测试**（`tests/test_quality.py`）。
 
 真实 PG 端到端用例默认跳过，配置后启用：

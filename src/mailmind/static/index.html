@@ -4,343 +4,35 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>MailMind · 智能邮箱管理台</title>
-<style>
-  :root { --bg:#f6f8fb; --card:#fff; --line:#e3e9f2; --text:#1f2937; --muted:#6b7280;
-          --brand:#2563eb; --warn:#b45309; --danger:#dc2626; --ok:#059669; }
-  * { box-sizing: border-box; }
-  body { margin:0; font:14px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;
-         background:var(--bg); color:var(--text); }
-  header { background:var(--card); border-bottom:1px solid var(--line); padding:14px 24px;
-           display:flex; align-items:center; gap:16px; position:sticky; top:0; z-index:5; }
-  header h1 { font-size:17px; margin:0; }
-  .badge { font-size:12px; padding:2px 8px; border-radius:999px; background:#eef2ff; color:var(--brand); }
-  .badge.ok { background:#ecfdf5; color:var(--ok); }
-  .badge.bad { background:#fef2f2; color:var(--danger); }
-  main { padding:20px 24px 60px; max-width:1280px; margin:0 auto; }
-  nav { display:flex; gap:6px; margin-bottom:16px; flex-wrap:wrap; }
-  nav button { border:1px solid var(--line); background:var(--card); color:var(--muted);
-               padding:7px 14px; border-radius:8px; cursor:pointer; font-size:13px; }
-  nav button.active { background:var(--brand); border-color:var(--brand); color:#fff; }
-  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:12px; margin-bottom:18px; }
-  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; }
-  .card .num { font-size:26px; font-weight:600; }
-  .card .label { color:var(--muted); font-size:12px; }
-  table { width:100%; border-collapse:collapse; background:var(--card); border:1px solid var(--line);
-          border-radius:12px; overflow:hidden; }
-  th, td { text-align:left; padding:10px 12px; border-bottom:1px solid var(--line); vertical-align:top; }
-  th { background:#f9fbfe; font-size:12px; color:var(--muted); font-weight:600; }
-  tr:last-child td { border-bottom:none; }
-  .tag { display:inline-block; font-size:11px; padding:1px 7px; border-radius:999px; background:#eef2ff; color:var(--brand); margin-right:4px; }
-  .tag.spam { background:#fef2f2; color:var(--danger); }
-  .tag.ham { background:#ecfdf5; color:var(--ok); }
-  .tag.warn { background:#fffbeb; color:var(--warn); }
-  .muted { color:var(--muted); font-size:12px; }
-  button.act { font-size:12px; padding:4px 10px; border-radius:6px; border:1px solid var(--line);
-               background:#fff; cursor:pointer; margin-right:4px; }
-  button.act.primary { background:var(--brand); border-color:var(--brand); color:#fff; }
-  button.act.danger { color:var(--danger); border-color:#fecaca; }
-  input, textarea { width:100%; padding:8px 10px; border:1px solid var(--line); border-radius:8px;
-                    font:inherit; background:#fff; }
-  textarea { min-height:90px; resize:vertical; }
-  .row { display:flex; gap:10px; margin-bottom:10px; align-items:center; }
-  .row > * { flex:1; }
-  .row > .fixed { flex:0 0 auto; }
-  pre { white-space:pre-wrap; background:#0f172a; color:#e2e8f0; padding:14px; border-radius:10px;
-        font-size:12px; overflow:auto; }
-  .empty { padding:32px; text-align:center; color:var(--muted); }
-  .err { color:var(--danger); font-size:12px; }
-</style>
+<link rel="stylesheet" href="/ui/style.css" />
 </head>
 <body>
 <header>
   <h1>MailMind</h1>
   <span class="badge" id="mode">加载中…</span>
   <span class="badge" id="health">-</span>
-  <span style="flex:1"></span>
-  <input id="apikey" placeholder="X-API-Key（未启用鉴权可留空）" style="max-width:280px" />
+  <span class="spacer"></span>
+  <input id="apikey" placeholder="X-API-Key（未启用鉴权可留空）" style="max-width:240px" />
+  <button class="act" id="refresh">刷新</button>
 </header>
 
 <main>
   <nav id="tabs">
-    <button data-tab="overview" class="active">总览</button>
+    <button data-tab="overview">总览</button>
     <button data-tab="inbox">收件箱</button>
     <button data-tab="quarantine">隔离区</button>
     <button data-tab="review">自动回复审核</button>
+    <button data-tab="accounts">账号</button>
     <button data-tab="rules">规则</button>
     <button data-tab="kb">知识库</button>
+    <button data-tab="audit">审计</button>
+    <button data-tab="feedback">反馈</button>
   </nav>
-  <section id="view"></section>
+  <section id="view"><div class="card empty">加载中…</div></section>
 </main>
 
-<script>
-const state = { tab: "overview" };
-const $ = (sel) => document.querySelector(sel);
-
-function key() { return localStorage.getItem("mailmind-key") || ""; }
-$("#apikey").value = key();
-$("#apikey").addEventListener("change", (e) => {
-  localStorage.setItem("mailmind-key", e.target.value.trim()); reload();
-});
-
-async function api(path, options = {}) {
-  const headers = Object.assign({ "Content-Type": "application/json" }, options.headers || {});
-  const k = key(); if (k) headers["X-API-Key"] = k;
-  const res = await fetch(path, Object.assign({}, options, { headers }));
-  if (!res.ok) {
-    let detail = res.statusText;
-    try { detail = (await res.json()).detail || detail; } catch (_) {}
-    throw new Error(`${res.status} ${detail}`);
-  }
-  if (res.status === 204) return null;
-  return res.json();
-}
-
-const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
-
-function verdictTags(v) {
-  if (!v) return '<span class="tag">未判定</span>';
-  const spam = v.spam_label === "spam" ? `<span class="tag spam">${esc(v.spam_label)} ${v.spam_score?.toFixed?.(2)}</span>`
-                                       : `<span class="tag ham">ham</span>`;
-  return spam + `<span class="tag">${esc(v.category)}</span>` + `<span class="tag ${v.spam_action === 'quarantine' ? 'warn' : ''}">${esc(v.spam_action)}</span>`;
-}
-
-async function loadOverview() {
-  const [m, h] = await Promise.all([api("/api/v1/metrics/overview"), api("/api/v1/health")]);
-  $("#mode").textContent = `LLM: ${h.llm_provider} · 回复模式: ${h.auto_reply_mode}`;
-  $("#health").textContent = `服务 ${h.status}`;
-  $("#health").className = "badge " + (h.status === "ok" ? "ok" : "bad");
-  $("#view").innerHTML = `
-    <div class="grid">
-      <div class="card"><div class="num">${m.mails_total}</div><div class="label">邮件总数</div></div>
-      <div class="card"><div class="num">${(m.spam_rate * 100).toFixed(1)}%</div><div class="label">垃圾邮件占比</div></div>
-      <div class="card"><div class="num">${m.quarantine_pending}</div><div class="label">隔离区待处理</div></div>
-      <div class="card"><div class="num">${m.review_pending}</div><div class="label">待审核回复</div></div>
-      <div class="card"><div class="num">${m.feedback_total}</div><div class="label">反馈样本</div></div>
-    </div>
-    <div class="card">
-      <div class="label">分类分布</div>
-      <table><thead><tr><th>类别</th><th>数量</th></tr></thead><tbody>
-        ${Object.entries(m.by_category).map(([k, v]) => `<tr><td>${esc(k)}</td><td>${v}</td></tr>`).join("") || '<tr><td colspan="2" class="empty">暂无数据</td></tr>'}
-      </tbody></table>
-    </div>`;
-}
-
-async function loadInbox() {
-  const data = await api("/api/v1/mails?page=1&size=50");
-  const rows = data.items.map((m) => `
-    <tr>
-      <td>${esc(m.from_addr)}<div class="muted">${esc(m.received_at || "")}</div></td>
-      <td>${esc(m.subject)}<div class="muted">${esc(m.snippet)}</div></td>
-      <td>${verdictTags(m.verdict)}</td>
-      <td><span class="tag">${esc(m.status)}</span></td>
-      <td>
-        <button class="act" data-draft="${m.id}">AI 起草</button>
-        <button class="act" data-spam="${m.id}">是垃圾</button>
-        <button class="act" data-ham="${m.id}">非垃圾</button>
-      </td>
-    </tr>`).join("");
-  $("#view").innerHTML = `<table><thead><tr><th>发件人</th><th>主题</th><th>判定</th><th>状态</th><th>操作</th></tr></thead>
-    <tbody>${rows || '<tr><td colspan="5" class="empty">暂无邮件</td></tr>'}</tbody></table>`;
-
-  document.querySelectorAll("[data-draft]").forEach((b) => b.onclick = async () => {
-    try {
-      const d = await api(`/api/v1/mails/${b.dataset.draft}/reply/draft`, { method: "POST" });
-      alert(`草稿已生成（${d.status}，置信度 ${d.confidence}）\n\n${d.body || "(空)"}`);
-      reload();
-    } catch (e) { alert(e.message); }
-  });
-  document.querySelectorAll("[data-spam]").forEach((b) => b.onclick = async () => {
-    await api(`/api/v1/mails/${b.dataset.spam}/feedback`, { method: "POST",
-      body: JSON.stringify({ task: "spam", label: { label: "spam" } }) });
-    reload();
-  });
-  document.querySelectorAll("[data-ham]").forEach((b) => b.onclick = async () => {
-    await api(`/api/v1/mails/${b.dataset.ham}/feedback`, { method: "POST",
-      body: JSON.stringify({ task: "spam", label: { label: "ham" } }) });
-    reload();
-  });
-}
-
-async function loadQuarantine() {
-  const data = await api("/api/v1/quarantine?page=1&size=50");
-  const rows = data.items.map((m) => `
-    <tr>
-      <td>${esc(m.from_addr)}</td>
-      <td>${esc(m.subject)}<div class="muted">${(m.verdict?.spam_reasons || []).map(r => esc(r.desc || r.type)).join(" · ")}</div></td>
-      <td>${(m.verdict?.spam_score ?? 0).toFixed(3)}</td>
-      <td>
-        <button class="act primary" data-release="${m.id}">放行并加白</button>
-        <button class="act danger" data-del="${m.id}">删除</button>
-      </td>
-    </tr>`).join("");
-  $("#view").innerHTML = `<table><thead><tr><th>发件人</th><th>主题 / 原因</th><th>分数</th><th>操作</th></tr></thead>
-    <tbody>${rows || '<tr><td colspan="4" class="empty">隔离区为空 🎉</td></tr>'}</tbody></table>`;
-
-  document.querySelectorAll("[data-release]").forEach((b) => b.onclick = async () => {
-    await api(`/api/v1/quarantine/${b.dataset.release}/release?add_allowlist=true`, { method: "POST" });
-    reload();
-  });
-  document.querySelectorAll("[data-del]").forEach((b) => b.onclick = async () => {
-    await api(`/api/v1/quarantine/${b.dataset.del}/delete`, { method: "POST" });
-    reload();
-  });
-}
-
-async function loadReview() {
-  const data = await api("/api/v1/replies?status=pending_review&size=50");
-  if (!data.items.length) {
-    $("#view").innerHTML = '<div class="card empty">没有待审核的回复草稿</div>';
-    return;
-  }
-  $("#view").innerHTML = data.items.map((d) => `
-    <div class="card" style="margin-bottom:14px">
-      <div class="muted">草稿 #${d.id} · 邮件 #${d.mail_id} · 意图 ${esc(d.intent)} · 置信度 ${d.confidence} · ${esc(d.model)}</div>
-      <h3 style="margin:6px 0">${esc(d.subject)}</h3>
-      <textarea data-body="${d.id}">${esc(d.body)}</textarea>
-      <div class="row" style="margin-top:10px">
-        <input class="fixed" style="max-width:200px" id="reviewer" placeholder="审核人" value="ops" />
-        <button class="act primary fixed" data-approve="${d.id}">审核通过并发送</button>
-        <button class="act danger fixed" data-reject="${d.id}">拒绝</button>
-        <span class="muted">引用: ${(d.citations || []).join(", ") || "无"} · 风险: ${(d.risk_flags || []).join(", ") || "无"}</span>
-      </div>
-    </div>`).join("");
-
-  document.querySelectorAll("[data-approve]").forEach((b) => b.onclick = async () => {
-    const id = b.dataset.approve;
-    const body = document.querySelector(`[data-body="${id}"]`).value;
-    const reviewer_id = document.querySelector("#reviewer").value || "ops";
-    try {
-      const res = await api(`/api/v1/replies/${id}/approve`, { method: "POST",
-        body: JSON.stringify({ reviewer_id, body }) });
-      alert(res.ok ? "已发送" : `发送失败：${res.error}`);
-      reload();
-    } catch (e) { alert(e.message); }
-  });
-  document.querySelectorAll("[data-reject]").forEach((b) => b.onclick = async () => {
-    await api(`/api/v1/replies/${b.dataset.reject}/reject`, { method: "POST",
-      body: JSON.stringify({ reviewer_id: "ops", reason: "人工判断不合适" }) });
-    reload();
-  });
-}
-
-async function loadRules() {
-  const rules = await api("/api/v1/rules");
-  const rows = rules.map((r) => `
-    <tr>
-      <td>${r.id}</td><td>${esc(r.kind)}</td><td>${esc(r.action)}</td>
-      <td><code class="muted">${esc(JSON.stringify(r.payload))}</code></td>
-      <td>${r.priority}</td>
-      <td><button class="act ${r.enabled ? "" : "danger"}" data-toggle="${r.id}" data-on="${r.enabled}">${r.enabled ? "禁用" : "启用"}</button></td>
-    </tr>`).join("");
-  $("#view").innerHTML = `
-    <div class="card" style="margin-bottom:14px">
-      <div class="label">规则试算（只计算不落库）</div>
-      <div class="row" style="margin-top:8px">
-        <input id="rtFrom" placeholder="发件人，如 promo@spam.cn" />
-        <input id="rtSubj" placeholder="主题，如 恭喜中奖" />
-      </div>
-      <textarea id="rtBody" placeholder="正文，例如：立即点击 http://1.2.3.4/x 领取 10000 元"></textarea>
-      <div class="row" style="margin-top:10px">
-        <button class="act primary fixed" id="rtRun">试算判定</button>
-        <span class="muted">返回命中规则、spam 分数/动作与分类结果，用于调阈值</span>
-      </div>
-      <pre id="rtOut" style="display:none"></pre>
-    </div>
-    <div class="card" style="margin-bottom:14px">
-      <div class="row"><input id="rkind" placeholder="kind: allowlist/blocklist/keyword/auth/..." />
-      <input id="raction" placeholder="action: spam/ham/tag/route" />
-      <input id="rpayload" placeholder='payload JSON，如 {"domains":["spam.cn"]}' /></div>
-      <div class="row"><input id="rdesc" placeholder="描述" />
-      <button class="act primary fixed" id="addrule">新增规则</button></div>
-    </div>
-    <table><thead><tr><th>ID</th><th>类型</th><th>动作</th><th>内容</th><th>优先级</th><th>操作</th></tr></thead>
-    <tbody>${rows || '<tr><td colspan="6" class="empty">暂无规则</td></tr>'}</tbody></table>`;
-
-  $("#rtRun").onclick = async () => {
-    const out = $("#rtOut");
-    try {
-      const res = await api("/api/v1/rules/test", { method: "POST", body: JSON.stringify({
-        from_addr: $("#rtFrom").value, subject: $("#rtSubj").value, body: $("#rtBody").value }) });
-      out.style.display = "block";
-      out.textContent = JSON.stringify({
-        spam: res.spam, category: res.classification.category,
-        hits: (res.rule_hits || []).map(h => h.desc || h.kind),
-      }, null, 2);
-    } catch (e) { out.style.display = "block"; out.textContent = "试算失败：" + e.message; }
-  };
-
-  $("#addrule").onclick = async () => {
-    try {
-      await api("/api/v1/rules", { method: "POST", body: JSON.stringify({
-        kind: $("#rkind").value, action: $("#raction").value || "spam",
-        payload: JSON.parse($("#rpayload").value || "{}"), description: $("#rdesc").value }) });
-      reload();
-    } catch (e) { alert(e.message); }
-  };
-  document.querySelectorAll("[data-toggle]").forEach((b) => b.onclick = async () => {
-    await api(`/api/v1/rules/${b.dataset.toggle}`, { method: "PATCH",
-      body: JSON.stringify({ enabled: b.dataset.on !== "true" }) });
-    reload();
-  });
-}
-
-async function loadKb() {
-  const docs = await api("/api/v1/kb/documents");
-  const rows = docs.items.map((d) => `
-    <tr><td>${d.id}</td><td>${esc(d.title)}</td><td>${esc(d.content).slice(0, 160)}…</td>
-    <td>${esc(d.source)}</td></tr>`).join("");
-  $("#view").innerHTML = `
-    <div class="card" style="margin-bottom:14px">
-      <input id="kbtitle" placeholder="标题，如「退换货政策」" />
-      <div style="height:8px"></div>
-      <textarea id="kbcontent" placeholder="知识内容，按空行分段会自动切片"></textarea>
-      <div class="row" style="margin-top:10px">
-        <button class="act primary fixed" id="addkb">导入知识</button>
-        <input id="kbq" placeholder="检索测试：输入一句话" style="flex:2" />
-        <button class="act fixed" id="kbsearch">检索</button>
-      </div>
-      <pre id="kbresult" style="display:none"></pre>
-    </div>
-    <table><thead><tr><th>ID</th><th>标题</th><th>内容</th><th>来源</th></tr></thead>
-    <tbody>${rows || '<tr><td colspan="4" class="empty">知识库为空</td></tr>'}</tbody></table>`;
-
-  $("#addkb").onclick = async () => {
-    try {
-      await api("/api/v1/kb/documents", { method: "POST", body: JSON.stringify({
-        title: $("#kbtitle").value, content: $("#kbcontent").value, source: "faq" }) });
-      reload();
-    } catch (e) { alert(e.message); }
-  };
-  $("#kbsearch").onclick = async () => {
-    const q = $("#kbq").value.trim(); if (!q) return;
-    const res = await api(`/api/v1/kb/search?q=${encodeURIComponent(q)}&top_k=5`);
-    const pre = $("#kbresult");
-    pre.style.display = "block";
-    pre.textContent = JSON.stringify(res.items, null, 2);
-  };
-}
-
-async function reload() {
-  const view = $("#view");
-  try {
-    if (state.tab === "overview") await loadOverview();
-    else if (state.tab === "inbox") await loadInbox();
-    else if (state.tab === "quarantine") await loadQuarantine();
-    else if (state.tab === "review") await loadReview();
-    else if (state.tab === "rules") await loadRules();
-    else if (state.tab === "kb") await loadKb();
-  } catch (e) {
-    view.innerHTML = `<div class="card err">加载失败：${esc(e.message)}</div>`;
-  }
-}
-
-document.querySelectorAll("#tabs button").forEach((btn) => btn.onclick = () => {
-  state.tab = btn.dataset.tab;
-  document.querySelectorAll("#tabs button").forEach((b) => b.classList.toggle("active", b === btn));
-  reload();
-});
-
-reload();
-</script>
+<div id="modal-root"></div>
+<div id="toast"></div>
+<script src="/ui/app.js"></script>
 </body>
 </html>
