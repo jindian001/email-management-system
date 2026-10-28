@@ -26,3 +26,6 @@ data/
 .idea/
 .vscode/
 *.local
+
+# macOS
+.DS_Store
