@@ -197,7 +197,8 @@ curl -s -o /dev/null -w "%{http_code}\n" localhost:8080/api/v1/mails
 curl -s -o /dev/null -w "%{http_code}\n" -H "X-API-Key: 你的key" localhost:8080/api/v1/mails
 ```
 
-第一条应返回 `401`，第二条 `200`。管理台右上角填入同一个 key 即可（保存在浏览器 localStorage）。
+第一条应返回 `401`，第二条 `200`。管理台右上角填入同一个 key 后按回车或点「保存」，之后所有请求会自动带
+（保存在浏览器 localStorage）。没填时页面顶部会出现黄色提示条「该服务已启用接口鉴权」。
 
 不确定服务端到底有没有开启鉴权，直接看健康检查：
 
@@ -367,7 +368,7 @@ docker compose up --build
 | 报 `model not found` | `MAILMIND_LLM_MODEL` 与服务端实际模型名不一致（Ollama 要带 tag，如 `qwen2.5:7b`） |
 | `curl` 返回 `000` | 不是 HTTP 码，是**连不上**：服务没起、端口不对或被杀掉了。先 `lsof -i :8080` 看监听，再 `make serve` |
 | 接口 401 | 配了 `MAILMIND_API_KEY`，请求要带 `X-API-Key`（管理台右上角填写），见 3.3 |
-| 管理台一直提示加载失败 401 | 后端开了鉴权但页面没填 key；填右上角输入框后会自动刷新 |
+| 管理台一直提示加载失败 401 | 后端开了鉴权但页面没填 key；在顶部黄色提示条或右上角输入框填入后回车即可 |
 | `/ui` 打不开 | 必须访问 `/ui/`（带尾斜杠）；没构建就先 `make web` |
 | sync 返回 400 | `provider=memory` 需要注入连接器；imap 账号要填 `config.imap_host` |
 | 回复没自动发 | 默认 `review` 模式，去「自动回复审核」点通过；或命中冷却/免打扰 |

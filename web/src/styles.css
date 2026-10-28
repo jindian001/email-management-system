@@ -40,6 +40,20 @@ body {
 
 .layout { max-width: 1320px; margin: 0 auto; padding: 16px 24px 72px; }
 
+.authbar {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 10px 24px;
+  background: var(--warn-weak);
+  border-bottom: 1px solid #fde68a;
+  color: var(--warn);
+  font-size: 13px;
+}
+.authbar input { max-width: 320px; }
+.authbar .act.primary { background: var(--warn); border-color: var(--warn); }
+
 .nav { display: flex; gap: 6px; margin-bottom: 16px; flex-wrap: wrap; }
 .nav button {
   border: 1px solid var(--line);

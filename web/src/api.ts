@@ -65,6 +65,10 @@ export async function api<T = unknown>(name: PathName, options: RequestOptions =
     body,
   });
 
+  if (response.status === 401) {
+    window.dispatchEvent(new CustomEvent("mailmind:unauthorized"));
+  }
+
   if (!response.ok) {
     let detail = response.statusText;
     try {

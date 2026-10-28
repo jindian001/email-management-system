@@ -36,7 +36,18 @@ export default function App() {
   const [route, setRoute] = useState<RouteKey>(currentRoute);
   const [refreshKey, setRefreshKey] = useState(0);
   const [apiKeyDraft, setApiKeyDraft] = useState(getApiKey());
+  const [needKey, setNeedKey] = useState(false);
   const health = useLoad(() => api<Health>("health"));
+
+  useEffect(() => {
+    const onUnauthorized = () => setNeedKey(true);
+    window.addEventListener("mailmind:unauthorized", onUnauthorized);
+    return () => window.removeEventListener("mailmind:unauthorized", onUnauthorized);
+  }, []);
+
+  useEffect(() => {
+    if (health.data?.auth === "enabled" && !getApiKey()) setNeedKey(true);
+  }, [health.data]);
 
   useEffect(() => {
     const onHash = () => setRoute(currentRoute());
@@ -52,6 +63,12 @@ export default function App() {
   const refresh = () => {
     health.reload();
     setRefreshKey((value) => value + 1);
+  };
+
+  const saveKey = () => {
+    setApiKey(apiKeyDraft);
+    setNeedKey(false);
+    refresh();
   };
 
   const Page = ROUTES[route].component;
@@ -70,19 +87,38 @@ export default function App() {
         </Badge>
         <span className="spacer" />
         <input
-          style={{ maxWidth: 240 }}
-          placeholder="X-API-Key（未启用鉴权可留空）"
+          style={{ maxWidth: 220 }}
+          placeholder="X-API-Key"
           value={apiKeyDraft}
           onChange={(event) => setApiKeyDraft(event.target.value)}
-          onBlur={() => {
-            setApiKey(apiKeyDraft);
-            refresh();
+          onKeyDown={(event) => {
+            if (event.key === "Enter") saveKey();
           }}
         />
+        <button className="act" onClick={saveKey}>
+          保存
+        </button>
         <button className="act" onClick={refresh}>
           刷新
         </button>
       </div>
+
+      {needKey ? (
+        <div className="authbar">
+          <span>该服务已启用接口鉴权，请填入 X-API-Key</span>
+          <input
+            placeholder="粘贴 X-API-Key 后回车"
+            value={apiKeyDraft}
+            onChange={(event) => setApiKeyDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") saveKey();
+            }}
+          />
+          <button className="act primary" onClick={saveKey}>
+            保存并刷新
+          </button>
+        </div>
+      ) : null}
 
       <div className="layout">
         <nav className="nav">

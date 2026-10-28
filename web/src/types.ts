@@ -159,6 +159,7 @@ export interface Health {
   llm_provider: string;
   auto_reply_mode: string;
   storage: string;
+  auth: string;
 }
 
 export interface Thread {
