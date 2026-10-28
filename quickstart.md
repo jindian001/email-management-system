@@ -72,6 +72,8 @@ curl -s -X POST localhost:8080/api/v1/accounts/1/sync
 ```
 
 - `secret` 用 `MAILMIND_SECRET_KEY` 派生的密钥加密存储，**建账号后不要再改这个值**。
+- 生产上先生成随机密钥再建账号：`python3 -c "import secrets; print(secrets.token_urlsafe(32))"`，
+  写进 `.env` 或环境变量，并妥善备份；换了它旧账号的密码就解不开（日志会打 `credential_decrypt_failed`）。
 - Gmail：`provider=gmail`，`secret` 填 OAuth access token；Graph 同理（发信走 SMTP）。
 - 同步是增量的（IMAP 用 UIDVALIDITY/UID，Gmail 用 historyId，Graph 用 receivedDateTime），重复执行不会产生重复邮件。
 
@@ -182,7 +184,7 @@ make test
 make lint
 ```
 
-当前基线：**310 passed, 1 skipped**。跳过的是需要真实 PostgreSQL 的用例，配置后可开启：
+当前基线：**311 passed, 1 skipped**。跳过的是需要真实 PostgreSQL 的用例，配置后可开启：
 
 ```bash
 MAILMIND_TEST_PG_URL=postgresql+psycopg://user:pass@localhost:5432/mailmind_test make test

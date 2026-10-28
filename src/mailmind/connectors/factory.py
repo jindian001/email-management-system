@@ -8,7 +8,10 @@ from mailmind.connectors.graph_connector import GRAPH_BASE, GraphConnector
 from mailmind.connectors.imap_connector import ImapConnector
 from mailmind.connectors.smtp_sender import SmtpSender
 from mailmind.core.config import Settings
+from mailmind.core.logging import get_logger
 from mailmind.core.security import secret_box
+
+log = get_logger("mailmind.connectors")
 
 
 def _secret(account, settings: Settings) -> str:
@@ -17,6 +20,13 @@ def _secret(account, settings: Settings) -> str:
     try:
         return secret_box(settings).decrypt(account.secret_enc)
     except ValueError:
+        # 常见原因：MAILMIND_SECRET_KEY 变更过，或数据库来自另一套密钥的环境
+        log.warning(
+            "credential_decrypt_failed",
+            account_id=account.id,
+            email=account.email,
+            hint="请检查 MAILMIND_SECRET_KEY 是否与创建账号时一致",
+        )
         return ""
 
 

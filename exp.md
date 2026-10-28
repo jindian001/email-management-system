@@ -1129,7 +1129,7 @@ REST 路径与 4.9 节保持一致；新增辅助接口（`/api/v1/health`、`/a
 
 | 项 | 结果 |
 |---|---|
-| 单元 + 集成测试 | **310 passed + 1 skipped**（`make test`，全程离线；跳过项是需真实 PG 的用例，配 `MAILMIND_TEST_PG_URL` 可开启） |
+| 单元 + 集成测试 | **311 passed + 1 skipped**（`make test`，全程离线；跳过项是需真实 PG 的用例，配 `MAILMIND_TEST_PG_URL` 可开启） |
 | 代码规范 | `ruff check src` 全绿 |
 | 垃圾过滤 | 独立小样本（12 spam / 12 ham）：召回 ≥ 0.7、误杀 ≤ 0.25、无正常邮件被隔离 |
 | 自动回复 | 命中知识库才生成草稿；无引用、空回复、PII 泄露一律拒绝；敏感承诺/提示注入转人工 |

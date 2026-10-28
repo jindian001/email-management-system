@@ -133,7 +133,7 @@ IMAP/Gmail/Graph ──► 解析(MIME) ──► 特征工程 ──► 垃圾�
 |---|---|---|
 | `MAILMIND_DATABASE_URL` | `sqlite+pysqlite:///./var/mailmind.db` | 生产用 `postgresql+psycopg://...` |
 | `MAILMIND_API_KEY` | 空 | 生产必须设置 |
-| `MAILMIND_SECRET_KEY` | dev 值 | 邮箱凭据加密密钥，生产必须改 |
+| `MAILMIND_SECRET_KEY` | `mailmind-dev-insecure-key` | 邮箱凭据加密密钥；生产必须换随机值，**建账号后不可再变** |
 | `MAILMIND_SPAM_PASS_THRESHOLD` | 0.70 | ≥ 该值打标 |
 | `MAILMIND_SPAM_QUARANTINE_THRESHOLD` | 0.95 | ≥ 该值隔离 |
 | `MAILMIND_AUTO_REPLY_SEND_MODE` | `review` | `review` 人工审核 / `auto` 高置信自动发送 |
