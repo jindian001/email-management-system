@@ -17,7 +17,8 @@ from mailmind.ml.llm import LLMGateway, build_gateway
 from mailmind.ml.naive_bayes import NaiveBayesModel
 from mailmind.ml.rules import RuleSet
 from mailmind.ml.spam import SpamFilter
-from mailmind.reply.policy import MemoryCooldown, ReplyPolicy
+from mailmind.reply.cooldown import CooldownStore, MemoryCooldown, build_cooldown
+from mailmind.reply.policy import ReplyPolicy
 from mailmind.reply.retrieval import HybridRetriever
 from mailmind.services.training import ensure_models
 from mailmind.storage import ObjectStore, make_store
@@ -29,7 +30,7 @@ class Runtime:
     llm: LLMGateway
     sender: MessageSender
     store: ObjectStore
-    cooldown: MemoryCooldown = field(default_factory=MemoryCooldown)
+    cooldown: CooldownStore = field(default_factory=MemoryCooldown)
     spam_model: NaiveBayesModel | None = None
     category_model: NaiveBayesModel | None = None
 
@@ -49,6 +50,7 @@ class Runtime:
             llm=llm or build_gateway(settings),
             sender=sender or RecordingSender(),
             store=store or make_store(settings),
+            cooldown=build_cooldown(settings),
             spam_model=spam_model,
             category_model=category_model,
         )

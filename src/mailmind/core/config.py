@@ -37,8 +37,12 @@ class Settings(BaseSettings):
     max_mail_bytes: int = 25 * 1024 * 1024
     max_attachment_bytes: int = 25 * 1024 * 1024
 
-    # ---------- 队列 ----------
+    # ---------- 队列与共享状态 ----------
     redis_url: str = "redis://localhost:6379/0"
+    # memory = 单进程；redis = 多实例共享（不可用时自动降级）
+    cooldown_backend: Literal["memory", "redis"] = "memory"
+    # 0 表示关闭；>0 时按调用方（X-API-Key 或 IP）做每分钟窗口限流
+    api_rate_limit_per_minute: int = 0
     celery_task_always_eager: bool = True
 
     # ---------- 安全 ----------

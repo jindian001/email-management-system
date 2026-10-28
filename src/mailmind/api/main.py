@@ -10,7 +10,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from mailmind import __version__
@@ -18,6 +18,7 @@ from mailmind.api.routers import accounts, kb, mails, quarantine, replies, rules
 from mailmind.core.config import Settings, get_settings
 from mailmind.core.logging import configure_logging, get_logger, new_trace_id, set_trace_id
 from mailmind.db.session import init_db, make_engine, make_session_factory
+from mailmind.services.rate_limit import RateLimiter
 from mailmind.services.runtime import Runtime
 
 log = get_logger("mailmind.api")
@@ -47,6 +48,11 @@ def create_app(
     app.state.runtime = runtime
     # 由调用方（测试/演示）注入 MemoryConnector，覆盖账号的真实连接器
     app.state.connectors = {}
+    app.state.rate_limiter = (
+        RateLimiter(settings.api_rate_limit_per_minute)
+        if settings.api_rate_limit_per_minute > 0
+        else None
+    )
 
     app.add_middleware(
         CORSMiddleware,
@@ -55,6 +61,22 @@ def create_app(
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    @app.middleware("http")
+    async def rate_limit_middleware(request: Request, call_next):
+        limiter: RateLimiter | None = app.state.rate_limiter
+        path = request.url.path
+        if limiter is not None and path.startswith("/api/v1") and path != "/api/v1/health":
+            key = request.headers.get("X-API-Key") or (
+                request.client.host if request.client else "anonymous"
+            )
+            if not limiter.hit(key):
+                return JSONResponse(
+                    status_code=429,
+                    content={"detail": "请求过于频繁，请稍后再试"},
+                    headers={"Retry-After": "60"},
+                )
+        return await call_next(request)
 
     @app.middleware("http")
     async def trace_middleware(request: Request, call_next):  # pragma: no cover - 框架级

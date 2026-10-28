@@ -7,10 +7,28 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from typing import Protocol
 
 from mailmind.connectors.base import is_auto_submitted, is_bulk, thread_depth
 from mailmind.core.config import Settings
+from mailmind.reply.cooldown import (
+    CooldownStore,
+    MemoryCooldown,
+    RedisCooldown,
+    build_cooldown,
+    cooldown_key,
+)
+
+__all__ = [
+    "CooldownStore",
+    "MemoryCooldown",
+    "PolicyResult",
+    "RedisCooldown",
+    "ReplyContext",
+    "ReplyPolicy",
+    "build_cooldown",
+    "cooldown_key",
+    "in_quiet_hours",
+]
 
 
 @dataclass
@@ -39,39 +57,6 @@ class PolicyResult:
 
     def to_dict(self) -> dict:
         return {"allowed": self.allowed, "reason": self.reason, "detail": self.detail}
-
-
-class CooldownStore(Protocol):
-    def is_blocked(self, key: str) -> bool: ...
-
-    def mark(self, key: str, ttl_hours: int) -> None: ...
-
-
-class MemoryCooldown:
-    """进程内冷却表；生产换 Redis（同 key、SETEX）。"""
-
-    def __init__(self, now_fn=None) -> None:
-        self._until: dict[str, datetime] = {}
-        self._now = now_fn or (lambda: datetime.now(UTC))
-
-    def is_blocked(self, key: str) -> bool:
-        until = self._until.get(key)
-        if until is None:
-            return False
-        if until <= self._now():
-            self._until.pop(key, None)
-            return False
-        return True
-
-    def mark(self, key: str, ttl_hours: int) -> None:
-        self._until[key] = self._now() + timedelta(hours=ttl_hours)
-
-    def clear(self) -> None:
-        self._until.clear()
-
-
-def cooldown_key(account_id: int, from_addr: str) -> str:
-    return f"autoreply:{account_id}:{from_addr.lower()}"
 
 
 def in_quiet_hours(settings: Settings, now: datetime) -> bool:
