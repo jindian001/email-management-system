@@ -17,6 +17,8 @@ from mailmind.connectors.base import (
     parse_address_list,
     thread_depth,
 )
+from mailmind.connectors.gmail_connector import GmailConnector, GmailSender
+from mailmind.connectors.graph_connector import GraphConnector
 from mailmind.connectors.imap_connector import ImapConnector
 from mailmind.connectors.smtp_sender import SmtpSender
 
@@ -25,6 +27,9 @@ __all__ = [
     "FetchPage",
     "FetchedMessage",
     "Folder",
+    "GmailConnector",
+    "GmailSender",
+    "GraphConnector",
     "ImapConnector",
     "MailConnector",
     "MemoryConnector",

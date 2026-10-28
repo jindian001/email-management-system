@@ -57,27 +57,10 @@ class Runtime:
         return ReplyPolicy(self.settings, self.cooldown)
 
     def sender_for(self, account) -> MessageSender:
-        """账号若配置了 SMTP，就用真实 SMTP 发送；否则用注入的发送器（测试/演示）。"""
-        from mailmind.connectors.smtp_sender import SmtpSender
-        from mailmind.core.security import secret_box
+        """账号配置了 SMTP/Gmail 就用真实网关，否则用注入的发送器（测试/演示）。"""
+        from mailmind.connectors.factory import build_sender
 
-        cfg = account.config or {}
-        host = cfg.get("smtp_host")
-        if not host:
-            return self.sender
-        password = ""
-        if account.secret_enc:
-            try:
-                password = secret_box(self.settings).decrypt(account.secret_enc)
-            except ValueError:
-                password = ""
-        return SmtpSender(
-            host=host,
-            port=int(cfg.get("smtp_port", 587)),
-            username=cfg.get("smtp_user", account.email),
-            password=password,
-            use_tls=bool(cfg.get("smtp_tls", True)),
-        )
+        return build_sender(account, self.settings, self.sender) or self.sender
 
     def retriever(self, session: Session | None = None) -> HybridRetriever:
         return HybridRetriever(self.settings, session=session)
