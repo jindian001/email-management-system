@@ -311,6 +311,26 @@ curl -s -X PATCH localhost:8080/api/v1/accounts/1 \
 
 依次是：演示数据、换端口启动、用反馈重训、验证 LLM、导入一封 .eml、同步 IMAP 账号。
 
+### 6.1 查看配置
+
+```bash
+mailmind config
+mailmind config --json
+```
+
+输出当前**生效**的配置，密钥只显示前 4 位（便于核对是不是同一个，又不至于泄漏）。
+
+配置来源优先级从高到低：
+
+| 来源 | 位置 |
+|---|---|
+| 环境变量 | `MAILMIND_*`，只在启动服务的那个 shell 生效 |
+| `.env` 文件 | 项目根目录（`~/Documents/助手/.env`），不存在就用默认值 |
+| 代码默认值 | `src/mailmind/core/config.py`（也是完整的配置项清单） |
+
+模板和示例值看 `.env.example`；Docker 部署时容器内的变量看 `docker-compose.yml` 的 `environment` 段，
+`docker compose config` 可以展开渲染后的最终值。
+
 ## 7. 前端开发 / 重新构建
 
 仓库已包含构建产物（`src/mailmind/static/`），直接 `make serve` 即可。改前端后：
@@ -336,7 +356,7 @@ make test
 make lint
 ```
 
-当前基线：**316 passed, 1 skipped**。跳过的是需要真实 PostgreSQL 的用例，配置后可开启：
+当前基线：**320 passed, 1 skipped**。跳过的是需要真实 PostgreSQL 的用例，配置后可开启：
 
 ```bash
 MAILMIND_TEST_PG_URL=postgresql+psycopg://user:pass@localhost:5432/mailmind_test make test

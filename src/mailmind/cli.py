@@ -100,6 +100,25 @@ def cmd_demo(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_config(args: argparse.Namespace) -> int:
+    """打印当前生效配置（密钥打码），不修改任何东西。"""
+    from mailmind.core.config import effective_settings
+
+    settings = get_settings()
+    env_file = Path(".env").resolve()
+    exists = env_file.is_file()
+    print(f"配置文件: {env_file} ({'存在' if exists else '不存在，当前使用环境变量 + 默认值'})")
+    print(f"读取优先级: 环境变量 > .env > 代码默认值（{Path('src/mailmind/core/config.py').resolve()}）\n")
+
+    data = effective_settings(settings)
+    if args.json:
+        print(json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True))
+        return 0
+    for key in sorted(data):
+        print(f"{key:32} = {data[key]}")
+    return 0
+
+
 def cmd_llm_check(_args: argparse.Namespace) -> int:
     """验证 LLM 配置：发一条最小请求，打印网关、耗时与结果摘要。"""
     from mailmind.ml.llm import TemplateGateway, build_gateway, probe_gateway
@@ -140,6 +159,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_ingest.add_argument("--file", required=True)
     p_ingest.add_argument("--folder", default="INBOX")
     p_ingest.set_defaults(func=cmd_ingest)
+
+    p_config = sub.add_parser("config", help="查看当前生效配置（密钥打码）")
+    p_config.add_argument("--json", action="store_true", help="以 JSON 输出")
+    p_config.set_defaults(func=cmd_config)
 
     p_llm = sub.add_parser("llm-check", help="验证 LLM 配置是否可用（发一条最小请求）")
     p_llm.set_defaults(func=cmd_llm_check)

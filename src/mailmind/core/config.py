@@ -147,3 +147,24 @@ class Settings(BaseSettings):
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     return Settings()
+
+
+SECRET_FIELDS = ("api_key", "secret_key", "llm_api_key")
+
+
+def mask_secret(value: str) -> str:
+    """只露前 4 位，够用来核对"是不是同一个"，又不至于泄漏。"""
+    if not value:
+        return "(未设置)"
+    if len(value) <= 4:
+        return "***（已隐藏）"
+    return f"{value[:4]}***（已隐藏）"
+
+
+def effective_settings(settings: Settings) -> dict:
+    """当前生效配置（密钥打码），用于 ``mailmind config`` 和排错。"""
+    data = settings.model_dump()
+    for field in SECRET_FIELDS:
+        if field in data:
+            data[field] = mask_secret(str(data[field] or ""))
+    return data
