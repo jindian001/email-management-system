@@ -1056,6 +1056,8 @@ MVP 只需证明三件事：① 能稳定收信解析；② 规则+TF-IDF 的 sp
 | MinIO / S3 对象存储 | `LocalObjectStore`（按 sha256 寻址）+ `MemoryObjectStore`（测试） | 开发环境无需额外服务；接口按 S3 语义定义 | 可。实现 `put/get/exists` 即可 |
 | React + Vite 管理台 | 无构建静态单页（`src/mailmind/static/index.html`），fetch 调用 REST API | 避免引入 node 构建链；后端可测性优先 | 可。API 契约不变 |
 | imapclient | **stdlib imaplib**（`connectors/imap_connector.py`） | 少一个依赖；UIDVALIDITY/UID 逻辑自持，解析函数可独立单测 | 可 |
+| 只做 IMAP 接入 | **Gmail API / Microsoft Graph 读取连接器已实现**（REST + 注入 `httpx.Client`，MockTransport 全覆盖），Gmail 另提供发送器 | exp 4.1 要求多提供商；不引入 google/microsoft SDK，测试可完全离线 | 可 |
+| 对象存储只做本地 | **S3/MinIO 兼容实现**（boto3 惰性加载、client 可注入、Stubber 测试） | 生产需要对象存储；未安装 boto3 时 local/memory 后端不受影响 | 可 |
 | Celery + Redis 必须常驻 | 默认 `celery_task_always_eager=true`；生产置 false 走 broker | 测试/演示不需要 broker；任务与 service 解耦 | 可 |
 | PostgreSQL 专属类型（CITEXT/ARRAY/JSONB） | 换成 `String/Text/JSON` | 让 SQLite（测试）与 PG（生产）共用一套模型 | 可。生产可加 PG 专属索引 |
 
@@ -1068,6 +1070,9 @@ MVP 只需证明三件事：① 能稳定收信解析；② 规则+TF-IDF 的 sp
 5. **HTML 正文必须过滤 script/style**：否则 `html_to_text` 会把 JS 当正文喂给模型。
 6. **测试不能依赖真实邮箱/网络/LLM**：外部依赖全部协议注入（`MemoryConnector`、`RecordingSender`、`TemplateGateway`）。
 7. **测试代码不推送**：`tests/` 已加入 `.git/info/exclude`，只在本地产出与运行。
+8. **Gmail 的 history 过期（404）必须当 reset 处理**：否则增量游标永久失效、后续邮件静默漏拉，与 IMAP 的 UIDVALIDITY 变化同等级。
+9. **Graph 的 `sendMail` 不能携带 In-Reply-To/References 等自定义头**：用它发会使回复脱离原会话，因此 Graph 账号统一走 SMTP（Graph 支持 SMTP AUTH），不要为了"统一"而牺牲线程。
+10. **Gmail 的 `raw` 是 base64url 且可能省略 padding**：解码前必须补齐 `=`，否则长邮件偶发解码失败。
 
 ### C.3 目录结构（实际）
 
@@ -1093,6 +1098,17 @@ tests/             # 仅本地（不推送）
 
 REST 路径与 4.9 节保持一致；新增辅助接口（`/api/v1/health`、`/api/v1/accounts/{id}/sync`、`/api/v1/kb/search`）用于联调与验收，共用同一版本前缀。
 
+二期补齐（均为 4.9 节已规划但首版未落地）：
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| POST | `/api/v1/mails/{id}/reply/send` | 对该邮件最新待审草稿一步审核并发送 |
+| POST | `/api/v1/rules/test` | 规则命中测试器：输入一封邮件，返回判定/命中规则/特征（不落库、不调 LLM） |
+| POST | `/api/v1/admin/retrain` | 用反馈数据重训并热替换运行时模型 |
+| GET | `/api/v1/audit` | 审计日志（按动作前缀过滤） |
+| GET | `/api/v1/feedback` | 反馈样本查询（按邮件/任务过滤） |
+| — | `GET /api/v1/mails?cursor=...` | 游标分页（`next_cursor`），深分页不再全表 offset |
+
 ### C.5 开发过程中发现并修复的问题（真实踩坑，非预演）
 
 | # | 现象 | 根因 | 修复 |
@@ -1110,10 +1126,14 @@ REST 路径与 4.9 节保持一致；新增辅助接口（`/api/v1/health`、`/a
 
 | 项 | 结果 |
 |---|---|
-| 单元 + 集成测试 | **228 passed**（`make test`，全程离线，无邮箱/网络/Redis 依赖） |
+| 单元 + 集成测试 | **283 passed + 1 skipped**（`make test`，全程离线；跳过项是需真实 PG 的用例，配 `MAILMIND_TEST_PG_URL` 可开启） |
 | 代码规范 | `ruff check src` 全绿 |
 | 垃圾过滤 | 独立小样本（12 spam / 12 ham）：召回 ≥ 0.7、误杀 ≤ 0.25、无正常邮件被隔离 |
 | 自动回复 | 命中知识库才生成草稿；无引用、空回复、PII 泄露一律拒绝；敏感承诺/提示注入转人工 |
 | 幂等 | 同一 `Message-ID` 重复投递不产生重复数据；UIDVALIDITY 变化触发全量重扫且不重复入库 |
 | 端到端 | `mailmind demo` → `/ui/` 管理台 → 审核通过 → 发送记录，全链路可跑通 |
 | 数据库迁移 | Alembic 初始迁移可通过 `upgrade head` 建出全部 9 张表，且有测试校验迁移与 ORM 模型列集合一致 |
+| 多提供商 | Gmail/Graph 连接器、Gmail 发送器均以 MockTransport 覆盖协议细节；工厂按 provider 自动装配 |
+| 对象存储 | 本地/内存/S3 三后端；S3 用 botocore Stubber 验证 put/get/exists 与错误分支 |
+| 可靠性与运维 | Redis 冷却（不可用自动降级）、API 限流（429 + Retry-After）、审计与反馈查询、游标分页 |
+| PostgreSQL 兼容 | 全部 DDL/索引以 PG 方言编译校验（标识符长度、JSON/BOOLEAN 类型），并保留真实 PG 端到端用例 |

@@ -4,7 +4,8 @@
 设计依据见 [exp.md](exp.md)（架构、选型、实施步骤、评测方案、实现偏差记录）。
 
 - 后端：Python 3.11+ / FastAPI / SQLAlchemy / Celery
-- 存储：PostgreSQL（生产）/ SQLite（测试）/ 本地或 S3 语义对象存储
+- 接入：IMAP、Gmail API、Microsoft Graph（读取）；SMTP / Gmail API（发送）
+- 存储：PostgreSQL（生产）/ SQLite（测试）；对象存储支持本地目录、内存、S3/MinIO
 - 模型：纯 Python TF-IDF + 朴素贝叶斯（零依赖、确定性）+ 规则引擎 + LLM 复核与起草
 - 前端：无构建单页管理台（`/ui/`），直接调用 REST API
 
@@ -85,14 +86,18 @@ IMAP/Gmail/Graph ──► 解析(MIME) ──► 特征工程 ──► 垃圾�
 | POST/GET/DELETE | `/api/v1/accounts` `/api/v1/accounts/{id}` | 账号管理 |
 | POST | `/api/v1/accounts/{id}/ingest` | 投递一封原始邮件（联调/回放） |
 | POST | `/api/v1/accounts/{id}/sync` | 增量同步（provider=memory 时需注入 MemoryConnector 测试替身） |
-| GET | `/api/v1/mails` | 列表，支持 `account_id/status/category/spam_action/q/page/size` |
+| GET | `/api/v1/mails` | 列表，支持 `account_id/status/category/spam_action/q/page/size/cursor`（返回 `next_cursor`） |
 | GET | `/api/v1/mails/{id}` `/raw` `/thread` | 详情 / 原文下载 / 会话 |
 | POST | `/api/v1/mails/{id}/feedback` | 反馈（spam / category / reply_quality） |
 | POST | `/api/v1/mails/{id}/reply/draft` | 按需 AI 起草 |
+| POST | `/api/v1/mails/{id}/reply/send` | 最新草稿一步审核并发送 |
 | GET/POST | `/api/v1/quarantine` `/{id}/release` `/{id}/delete` | 隔离区 |
 | GET/POST | `/api/v1/replies` `/{id}/approve` `/{id}/reject` | 审核队列 |
 | GET/POST/PATCH/DELETE | `/api/v1/rules` | 黑白名单/关键词/认证/信誉/分类路由 |
 | GET/POST/DELETE | `/api/v1/kb/documents` `GET /api/v1/kb/search` | 知识库 |
+| POST | `/api/v1/rules/test` | 规则试算：给一封邮件，返回判定/命中规则/特征（不落库） |
+| POST | `/api/v1/admin/retrain` | 用反馈数据重训并热替换模型 |
+| GET | `/api/v1/audit` `/api/v1/feedback` | 审计日志 / 反馈样本 |
 | GET | `/api/v1/metrics/overview` | 运营指标 |
 
 鉴权：配置 `MAILMIND_API_KEY` 后，所有非 health 接口需要 `X-API-Key` 头。
@@ -104,7 +109,6 @@ IMAP/Gmail/Graph ──► 解析(MIME) ──► 特征工程 ──► 垃圾�
 | 变量 | 默认 | 说明 |
 |---|---|---|
 | `MAILMIND_DATABASE_URL` | `sqlite+pysqlite:///./var/mailmind.db` | 生产用 `postgresql+psycopg://...` |
-| `MAILMIND_STORAGE_BACKEND` | `local` | `local` / `memory` |
 | `MAILMIND_API_KEY` | 空 | 生产必须设置 |
 | `MAILMIND_SECRET_KEY` | dev 值 | 邮箱凭据加密密钥，生产必须改 |
 | `MAILMIND_SPAM_PASS_THRESHOLD` | 0.70 | ≥ 该值打标 |
@@ -113,6 +117,10 @@ IMAP/Gmail/Graph ──► 解析(MIME) ──► 特征工程 ──► 垃圾�
 | `MAILMIND_AUTO_REPLY_COOLDOWN_HOURS` | 24 | 同一发件人冷却期 |
 | `MAILMIND_QUIET_HOURS_START/END` | 空 | 免打扰时段，如 `22:00` / `08:00` |
 | `MAILMIND_LLM_PROVIDER` | `template` | `template` 离线确定性 / `openai` 兼容 DeepSeek 等 |
+| `MAILMIND_COOLDOWN_BACKEND` | `memory` | `redis` 时多实例共享冷却，Redis 不可用自动降级 |
+| `MAILMIND_API_RATE_LIMIT_PER_MINUTE` | 0 | >0 时按 `X-API-Key`/IP 限流，超限 429 |
+| `MAILMIND_STORAGE_BACKEND` | `local` | `local` / `memory` / `s3`（需 `pip install 'mailmind[s3]'`） |
+| `MAILMIND_S3_BUCKET` / `S3_PREFIX` / `S3_ENDPOINT_URL` / `S3_REGION` | 空 | S3 或 MinIO 参数 |
 
 ## 目录结构
 
@@ -120,7 +128,7 @@ IMAP/Gmail/Graph ──► 解析(MIME) ──► 特征工程 ──► 垃圾�
 src/mailmind/
 ├── core/        配置、日志（trace_id）、凭据加密
 ├── db/          ORM 模型（9 张表）、会话
-├── connectors/  IMAP / SMTP / 内存实现 / 连接器工厂
+├── connectors/  IMAP / Gmail / Graph / SMTP / 内存实现 / 工厂
 ├── pipeline/    MIME 解析、归一化、PII、特征、会话归并
 ├── ml/          分词、NB、规则、垃圾级联、分类、embedding、LLM、护栏、种子语料
 ├── reply/       放行策略、混合检索、RAG 生成、发送
@@ -135,14 +143,21 @@ tests/           仅本地保留（不推送）
 ## 测试
 
 ```bash
-make test        # 228 passed
+make test        # 283 passed, 1 skipped
 make lint        # ruff + mypy
 ```
 
 测试覆盖：解析/MIME/编码、归一化与 PII、特征、规则引擎、朴素贝叶斯、级联判定、分类、
 护栏、检索、放行策略（RFC 3834）、生成、发送、接入幂等与 UIDVALIDITY、API 全量、
-IMAP/ SMTP 协议解析（假 client）、任务函数、对象存储与凭据加密，以及一个
+IMAP/SMTP/Gmail/Graph 协议解析（假 client 与 MockTransport）、任务函数、对象存储（含 S3 Stubber）、
+凭据加密、Redis 冷却与 API 限流、游标分页、Alembic 迁移一致性、PostgreSQL DDL 兼容性，以及一个
 **召回率/误杀率验收测试**（`tests/test_quality.py`）。
+
+真实 PG 端到端用例默认跳过，配置后启用：
+
+```bash
+MAILMIND_TEST_PG_URL=postgresql+psycopg://user:pass@localhost:5432/mailmind_test make test
+```
 
 ## 部署
 
