@@ -1052,7 +1052,7 @@ MVP 只需证明三件事：① 能稳定收信解析；② 规则+TF-IDF 的 sp
 | scikit-learn（TF-IDF + LinearSVC/LogReg） | **纯 Python 多项式朴素贝叶斯**（`ml/naive_bayes.py`），字 unigram+bigram | 零额外依赖、训练/推理全确定、可 JSON 序列化、CI 可复现；样本量小时与线性模型差距有限 | 可。`SpamFilter` 只依赖 `predict_proba(text)` 协议 |
 | pgvector 向量列 + HNSW | `kb_documents.embedding` 存 **JSON 数组**，Python 内算余弦 | 兼容 SQLite（测试）与 PG（生产）；万级知识库足够 | 可。`retrieval.py` 只依赖 `embedder.embed()` |
 | BGE-M3 语义 embedding | **确定性 hash 签名投影**（`ml/embeddings.py`） | 离线/无 GPU 可跑，不引推理服务 | 可。换成 BGE-M3 只需实现同一协议 |
-| LLM 默认走真实 API | 默认 `template`：本地确定性生成/复核；`openai` 走 OpenAI 兼容协议（DeepSeek 等） | 测试与离线演示必须可跑，不能依赖网络与密钥 | 可。改环境变量即可 |
+| LLM 默认走真实 API | 默认 `template`：本地确定性生成/复核；`openai` 走 OpenAI 兼容协议（DeepSeek/Qwen/vLLM/Ollama）。带重试、可选 JSON mode、失败自动降级，并提供 `mailmind llm-check` 自检 | 测试与离线演示必须可跑，不能依赖网络与密钥；真实接入要能一条命令排错 | 可。改环境变量即可 |
 | MinIO / S3 对象存储 | `LocalObjectStore`（按 sha256 寻址）+ `MemoryObjectStore`（测试） | 开发环境无需额外服务；接口按 S3 语义定义 | 可。实现 `put/get/exists` 即可 |
 | React + Vite 管理台 | **React 19 + TypeScript + Vite 已落地**（`web/`），产物输出到 `src/mailmind/static/` 由 FastAPI 托管在 `/ui/`；接口清单集中在 `web/src/api-paths.json` | 交付可维护的前端；构建产物入库，`make serve` 无需 node；接口漂移由测试守护 | 可。接口契约不变，构建产物可随时替换 |
 | imapclient | **stdlib imaplib**（`connectors/imap_connector.py`） | 少一个依赖；UIDVALIDITY/UID 逻辑自持，解析函数可独立单测 | 可 |
@@ -1128,7 +1128,7 @@ REST 路径与 4.9 节保持一致；新增辅助接口（`/api/v1/health`、`/a
 
 | 项 | 结果 |
 |---|---|
-| 单元 + 集成测试 | **292 passed + 1 skipped**（`make test`，全程离线；跳过项是需真实 PG 的用例，配 `MAILMIND_TEST_PG_URL` 可开启） |
+| 单元 + 集成测试 | **307 passed + 1 skipped**（`make test`，全程离线；跳过项是需真实 PG 的用例，配 `MAILMIND_TEST_PG_URL` 可开启） |
 | 代码规范 | `ruff check src` 全绿 |
 | 垃圾过滤 | 独立小样本（12 spam / 12 ham）：召回 ≥ 0.7、误杀 ≤ 0.25、无正常邮件被隔离 |
 | 自动回复 | 命中知识库才生成草稿；无引用、空回复、PII 泄露一律拒绝；敏感承诺/提示注入转人工 |
@@ -1139,4 +1139,5 @@ REST 路径与 4.9 节保持一致；新增辅助接口（`/api/v1/health`、`/a
 | 对象存储 | 本地/内存/S3 三后端；S3 用 botocore Stubber 验证 put/get/exists 与错误分支 |
 | 可靠性与运维 | Redis 冷却（不可用自动降级）、API 限流（429 + Retry-After）、审计与反馈查询、游标分页 |
 | PostgreSQL 兼容 | 全部 DDL/索引以 PG 方言编译校验（标识符长度、JSON/BOOLEAN 类型），并保留真实 PG 端到端用例 |
+| LLM 接入 | 本地 mock OpenAI 服务跑通"HTTP → JSON → 护栏 → 落库"全链路；重试、JSON mode、降级、`llm-check` 均有测试 |
 | 管理台 | React 19 + TS + Vite，9 个页面（总览/收件箱/详情/隔离区/审核/账号/规则试算/知识库/审计/反馈）；构建产物由 FastAPI 托管，接口清单与 OpenAPI 一致性、构建产物可访问性均有测试守护 |

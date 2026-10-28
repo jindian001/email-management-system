@@ -63,23 +63,67 @@ curl -s -X POST localhost:8080/api/v1/accounts/1/sync
 - Gmail：`provider=gmail`，`secret` 填 OAuth access token；Graph 同理（发信走 SMTP）。
 - 同步是增量的（IMAP 用 UIDVALIDITY/UID，Gmail 用 historyId，Graph 用 receivedDateTime），重复执行不会产生重复邮件。
 
-## 4. 两个开关
+## 4. 打开自动发送（可选）
 
 ```bash
-# 让高置信度回复真的自动发出去（默认人工审核）
-export MAILMIND_AUTO_REPLY_SEND_MODE=auto
+export MAILMIND_AUTO_REPLY_SEND_MODE=auto     # 默认 review：只起草，人工点通过
 export MAILMIND_AUTO_REPLY_MIN_CONFIDENCE=0.85
-
-# 接真实大模型（默认 template 是离线确定性生成）
-export MAILMIND_LLM_PROVIDER=openai
-export MAILMIND_LLM_API_KEY=sk-xxx
-export MAILMIND_LLM_MODEL=deepseek-chat
 ```
 
 即使开了 `auto`，以下情况仍强制转人工：SPF/DKIM 失败、类别不在白名单、对方是自动回复/退信/邮件列表、
 24h 内已回过、线程深度 >3、免打扰时段、无知识库引用、含价格承诺或个人信息。
 
-## 5. 常用命令
+## 5. 接入真实 LLM（可选）
+
+默认 `MAILMIND_LLM_PROVIDER=template`：**不调用任何模型**，用检索到的知识片段拼回复（离线、可复现）。
+要换成真实模型，走 OpenAI 兼容协议即可：
+
+```bash
+export MAILMIND_LLM_PROVIDER=openai
+export MAILMIND_LLM_BASE_URL=https://api.deepseek.com/v1   # 默认值
+export MAILMIND_LLM_MODEL=deepseek-chat
+export MAILMIND_LLM_API_KEY=sk-xxx
+
+mailmind llm-check        # 关键：发一条最小请求验证配置
+```
+
+`llm-check` 期望输出（`ok: true` 即接入成功）：
+
+```json
+{
+  "ok": true,
+  "gateway": "openai:deepseek-chat+fallback",
+  "elapsed_ms": 820.5,
+  "intent": "consult",
+  "citations": [1],
+  "body_preview": "您好，商品签收后 7 天内可无理由退货……",
+  "fallback_error": ""
+}
+```
+
+改完重启 `make serve`。之后在管理台「自动回复审核」里，草稿的 `model` 字段会显示 `openai:deepseek-chat`；
+仍是 `template` 说明没生效（见文末排错）。
+
+常用组合（`base_url` + `model` 两者要匹配服务端实际模型名）：
+
+| 服务 | `MAILMIND_LLM_BASE_URL` | `MAILMIND_LLM_MODEL` |
+|---|---|---|
+| DeepSeek | `https://api.deepseek.com/v1` | `deepseek-chat` |
+| 通义千问 | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `qwen-plus` |
+| 本地 vLLM | `http://127.0.0.1:8000/v1` | `qwen2.5-7b-instruct` |
+| 本地 Ollama | `http://127.0.0.1:11434/v1` | `qwen2.5:7b` |
+
+还有两个可选参数：
+
+```bash
+export MAILMIND_LLM_MAX_RETRIES=1       # 失败重试次数（默认 1）
+export MAILMIND_LLM_JSON_MODE=true      # 服务支持 response_format=json_object 时打开，输出更稳
+```
+
+模型调用失败（超时/401/返回非 JSON）会自动降级到 template，不会中断收信与回复链路；
+降级原因会出现在 `llm-check` 的 `fallback_error` 和日志 `llm_fallback` 里。
+
+## 6. 常用命令
 
 ```bash
 mailmind demo                      # 演示数据
@@ -89,7 +133,7 @@ mailmind ingest --account-id 1 --file invoice.eml
 mailmind sync --account-id 1 --limit 200
 ```
 
-## 6. 前端开发 / 重新构建
+## 7. 前端开发 / 重新构建
 
 仓库已包含构建产物（`src/mailmind/static/`），直接 `make serve` 即可。
 改前端后：
@@ -102,21 +146,21 @@ cd web && pnpm dev                 # http://127.0.0.1:5173/ui/
 
 接口路径统一登记在 `web/src/api-paths.json`，新增接口时先加清单，测试会校验它是否存在于 OpenAPI。
 
-## 7. 测试
+## 8. 测试
 
 ```bash
-make test        # 292 passed, 1 skipped（离线，不依赖邮箱/网络/Redis）
+make test        # 307 passed, 1 skipped（离线，不依赖邮箱/网络/Redis）
 make lint
 MAILMIND_TEST_PG_URL=postgresql+psycopg://user:pass@localhost:5432/mailmind_test make test  # 打开真实 PG 用例
 ```
 
-## 8. Docker 部署
+## 9. Docker 部署
 
 ```bash
 docker compose up --build      # 前端多阶段构建 + API + PG + Redis + worker
 ```
 
-## 9. 数据与重置
+## 10. 数据与重置
 
 ```
 var/mailmind.db     SQLite（生产改 MAILMIND_DATABASE_URL 指向 PG）
@@ -126,11 +170,15 @@ var/models/         spam_model.json / category_model.json
 
 重置：`rm -rf var && make demo`。
 
-## 10. 常见问题
+## 11. 常见问题
 
 | 现象 | 处理 |
 |---|---|
 | `mailmind: command not found` | `source .venv/bin/activate`，或用 `make` |
+| 配了 LLM 但仍显示 `template` | 没设 `MAILMIND_LLM_API_KEY`，或 `PROVIDER` 不是 `openai`；先跑 `mailmind llm-check` |
+| `llm-check` 报 401 | API Key 错误/过期，或该服务需要 `api-key` 以外的鉴权头 |
+| `llm-check` 报 timeout / connection | `BASE_URL` 写错、本地模型没起、或需要代理 |
+| 报 `model not found` | `MAILMIND_LLM_MODEL` 与服务端实际模型名不一致（Ollama 要带 tag，如 `qwen2.5:7b`） |
 | 接口 401 | 配了 `MAILMIND_API_KEY`，请求带 `X-API-Key`（管理台右上角填写）|
 | `/ui` 打不开 | 必须访问 `/ui/`（带尾斜杠）；没构建就先 `make web` |
 | sync 返回 400 | `provider=memory` 需要注入连接器；imap 账号要填 `config.imap_host` |

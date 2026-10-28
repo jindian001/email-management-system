@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
@@ -220,6 +221,8 @@ class OpenAICompatGateway:
         api_key: str,
         model: str,
         timeout: float = 30.0,
+        retries: int = 1,
+        json_mode: bool = False,
         http_client: Any | None = None,
     ) -> None:
         if http_client is None:
@@ -230,12 +233,13 @@ class OpenAICompatGateway:
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
         self.model = model
+        self.retries = max(0, int(retries))
+        self.json_mode = json_mode
+        self.last_error = ""
         self.name = f"openai:{model}"
 
-    def _chat(self, system: str, user: str) -> dict[str, Any]:
-        if not self.api_key:
-            raise LLMError("未配置 MAILMIND_LLM_API_KEY")
-        payload = {
+    def _payload(self, system: str, user: str) -> dict[str, Any]:
+        payload: dict[str, Any] = {
             "model": self.model,
             "messages": [
                 {"role": "system", "content": system},
@@ -243,18 +247,33 @@ class OpenAICompatGateway:
             ],
             "temperature": 0.2,
         }
-        try:
-            resp = self.client.post(
-                f"{self.base_url}/chat/completions",
-                headers={"Authorization": f"Bearer {self.api_key}"},
-                json=payload,
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            content = data["choices"][0]["message"]["content"]
-        except Exception as exc:  # noqa: BLE001
-            raise LLMError(f"LLM 调用失败: {exc}") from exc
-        return _parse_json(content)
+        if self.json_mode:
+            # 部分兼容服务不支持该字段，默认关闭；开启后对 JSON 输出更稳
+            payload["response_format"] = {"type": "json_object"}
+        return payload
+
+    def _chat(self, system: str, user: str) -> dict[str, Any]:
+        if not self.api_key:
+            raise LLMError("未配置 MAILMIND_LLM_API_KEY")
+        payload = self._payload(system, user)
+        last_exc: Exception | None = None
+        for attempt in range(self.retries + 1):
+            try:
+                resp = self.client.post(
+                    f"{self.base_url}/chat/completions",
+                    headers={"Authorization": f"Bearer {self.api_key}"},
+                    json=payload,
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                content = data["choices"][0]["message"]["content"]
+                return _parse_json(content)
+            except Exception as exc:  # noqa: BLE001 - 统一转 LLMError
+                last_exc = exc
+                self.last_error = str(exc)
+                if attempt < self.retries:
+                    time.sleep(min(0.5 * (2**attempt), 2.0))
+        raise LLMError(f"LLM 调用失败（已重试 {self.retries} 次）: {last_exc}") from last_exc
 
     def review_spam(self, *, subject: str, body: str, signals: dict[str, Any]) -> SpamReview:
         system = "你是垃圾邮件审核器。只输出 JSON：{\"is_spam\": bool, \"confidence\": 0-1, \"reason\": \"...\"}"
@@ -356,7 +375,46 @@ def build_gateway(settings) -> LLMGateway:
                 api_key=settings.llm_api_key,
                 model=settings.llm_model,
                 timeout=settings.llm_timeout_seconds,
+                retries=settings.llm_max_retries,
+                json_mode=settings.llm_json_mode,
             ),
             TemplateGateway(settings.app_name),
         )
     return TemplateGateway(settings.app_name)
+
+
+def probe_gateway(
+    gateway: LLMGateway,
+    *,
+    subject: str = "退货咨询",
+    body: str = "我买的东西想退货，运费谁承担？",
+    chunks: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """连通性/可用性探针：发一条最小请求，返回耗时与结果摘要。
+
+    给 ``mailmind llm-check`` 用，也可以在部署前手工验证配置是否正确。
+    """
+    sample_chunks = chunks or [
+        {"id": 1, "title": "退换货政策", "content": "商品签收后 7 天内可无理由退货，运费由买家承担。"}
+    ]
+    started = time.perf_counter()
+    try:
+        draft = gateway.draft_reply(subject=subject, body=body, chunks=sample_chunks)
+    except Exception as exc:  # noqa: BLE001 - 探针不应抛出
+        return {
+            "ok": False,
+            "gateway": gateway.name,
+            "elapsed_ms": round((time.perf_counter() - started) * 1000, 1),
+            "error": str(exc),
+        }
+    return {
+        "ok": True,
+        "gateway": gateway.name,
+        "elapsed_ms": round((time.perf_counter() - started) * 1000, 1),
+        "intent": draft.intent,
+        "confidence": draft.confidence,
+        "citations": draft.citations,
+        "body_preview": (draft.body or "")[:200],
+        "risk_flags": draft.risk_flags,
+        "fallback_error": getattr(gateway, "last_error", ""),
+    }
