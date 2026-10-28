@@ -208,6 +208,11 @@ curl -s localhost:8080/api/v1/health
 
 返回里的 `"auth": "enabled"` 或 `"disabled"` 就是当前真实状态（key 只在进程启动时读取，改了必须重启）。
 
+它保护的是"能读能写"的所有业务接口：邮件列表/正文、发送回复、放行隔离、改规则、重训、删账号。
+不需要 key 的只有 `/api/v1/health`、`/ui/**` 静态资源和 OpenAPI 文档。
+
+注意它不是"邮箱密码加密密钥"（那是 `MAILMIND_SECRET_KEY`），也不是"大模型 Key"（`MAILMIND_LLM_API_KEY`）。
+
 需要注意：
 
 - 目前是**单个共享 key**，没有角色/权限区分，审计里的操作者来自请求体（如 `reviewer_id`），不是 key 身份。
