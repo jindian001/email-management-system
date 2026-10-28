@@ -234,6 +234,19 @@ async function loadRules() {
     </tr>`).join("");
   $("#view").innerHTML = `
     <div class="card" style="margin-bottom:14px">
+      <div class="label">规则试算（只计算不落库）</div>
+      <div class="row" style="margin-top:8px">
+        <input id="rtFrom" placeholder="发件人，如 promo@spam.cn" />
+        <input id="rtSubj" placeholder="主题，如 恭喜中奖" />
+      </div>
+      <textarea id="rtBody" placeholder="正文，例如：立即点击 http://1.2.3.4/x 领取 10000 元"></textarea>
+      <div class="row" style="margin-top:10px">
+        <button class="act primary fixed" id="rtRun">试算判定</button>
+        <span class="muted">返回命中规则、spam 分数/动作与分类结果，用于调阈值</span>
+      </div>
+      <pre id="rtOut" style="display:none"></pre>
+    </div>
+    <div class="card" style="margin-bottom:14px">
       <div class="row"><input id="rkind" placeholder="kind: allowlist/blocklist/keyword/auth/..." />
       <input id="raction" placeholder="action: spam/ham/tag/route" />
       <input id="rpayload" placeholder='payload JSON，如 {"domains":["spam.cn"]}' /></div>
@@ -242,6 +255,19 @@ async function loadRules() {
     </div>
     <table><thead><tr><th>ID</th><th>类型</th><th>动作</th><th>内容</th><th>优先级</th><th>操作</th></tr></thead>
     <tbody>${rows || '<tr><td colspan="6" class="empty">暂无规则</td></tr>'}</tbody></table>`;
+
+  $("#rtRun").onclick = async () => {
+    const out = $("#rtOut");
+    try {
+      const res = await api("/api/v1/rules/test", { method: "POST", body: JSON.stringify({
+        from_addr: $("#rtFrom").value, subject: $("#rtSubj").value, body: $("#rtBody").value }) });
+      out.style.display = "block";
+      out.textContent = JSON.stringify({
+        spam: res.spam, category: res.classification.category,
+        hits: (res.rule_hits || []).map(h => h.desc || h.kind),
+      }, null, 2);
+    } catch (e) { out.style.display = "block"; out.textContent = "试算失败：" + e.message; }
+  };
 
   $("#addrule").onclick = async () => {
     try {

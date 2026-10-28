@@ -96,6 +96,18 @@ class ApproveIn(BaseModel):
     body: str | None = None
 
 
+class SendReplyIn(BaseModel):
+    reviewer_id: str = Field(min_length=1, max_length=64)
+    body: str | None = None
+
+
+class RuleTestIn(BaseModel):
+    raw: str | None = None
+    subject: str = ""
+    from_addr: str = ""
+    body: str = ""
+
+
 class RejectIn(BaseModel):
     reviewer_id: str = Field(min_length=1, max_length=64)
     reason: str = ""

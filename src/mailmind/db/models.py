@@ -193,6 +193,8 @@ class Feedback(Base):
     weight: Mapped[float] = mapped_column(Float, default=1.0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
+    mail: Mapped[Mail] = relationship()
+
 
 class KnowledgeDocument(Base):
     __tablename__ = "kb_documents"

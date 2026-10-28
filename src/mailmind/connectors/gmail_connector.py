@@ -16,8 +16,8 @@ import httpx
 
 from mailmind.connectors.base import (
     ConnectorError,
-    FetchPage,
     FetchedMessage,
+    FetchPage,
     Folder,
     OutgoingMessage,
     SendError,

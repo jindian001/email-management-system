@@ -2,13 +2,22 @@
 
 from __future__ import annotations
 
+import base64
 from datetime import UTC, datetime
 
-from sqlalchemy import Select, func, or_, select
+from sqlalchemy import Select, and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from mailmind.core.config import Settings
-from mailmind.db.models import Account, Feedback, Mail, MailVerdict, ReplyDraft, Rule
+from mailmind.db.models import (
+    Account,
+    AuditLog,
+    Feedback,
+    Mail,
+    MailVerdict,
+    ReplyDraft,
+    Rule,
+)
 from mailmind.reply.sender import ReplySenderService, SendOutcome
 from mailmind.services import audit
 from mailmind.services.runtime import Runtime
@@ -21,6 +30,25 @@ def _iso(value: datetime | None) -> str | None:
     if value.tzinfo is None:
         value = value.replace(tzinfo=UTC)
     return value.isoformat()
+
+
+def encode_cursor(mail: dict) -> str:
+    """游标 = base64(received_at|id)，避免深分页时 offset 扫描（exp.md 4.9）。"""
+    raw = f"{mail.get('received_at') or ''}|{mail['id']}".encode()
+    return base64.urlsafe_b64encode(raw).decode().rstrip("=")
+
+
+def decode_cursor(cursor: str) -> tuple[datetime, int] | None:
+    try:
+        padded = cursor + "=" * (-len(cursor) % 4)
+        raw = base64.urlsafe_b64decode(padded).decode()
+        ts, mail_id = raw.rsplit("|", 1)
+        parsed = datetime.fromisoformat(ts)
+        if parsed.tzinfo is not None:  # 与 SQLite 存储的 naive UTC 对齐
+            parsed = parsed.astimezone(UTC).replace(tzinfo=None)
+        return parsed, int(mail_id)
+    except (ValueError, UnicodeDecodeError):
+        return None
 
 
 def serialize_mail(mail: Mail, *, detail: bool = False) -> dict:
@@ -106,6 +134,7 @@ class MailService:
         q: str | None = None,
         page: int = 1,
         size: int = 50,
+        cursor: str | None = None,
     ) -> tuple[list[dict], int]:
         stmt: Select = select(Mail)
         count_stmt = select(func.count()).select_from(Mail)
@@ -131,8 +160,20 @@ class MailService:
             count_stmt = count_stmt.where(cond)
 
         total = int(self.session.scalar(count_stmt) or 0)
-        stmt = stmt.order_by(Mail.received_at.desc(), Mail.id.desc())
-        stmt = stmt.offset(max(page - 1, 0) * size).limit(size)
+        if cursor:
+            decoded = decode_cursor(cursor)
+            if decoded is None:
+                raise ValueError("cursor 非法")
+            ts, last_id = decoded
+            stmt = stmt.where(
+                or_(
+                    Mail.received_at < ts,
+                    and_(Mail.received_at == ts, Mail.id < last_id),
+                )
+            )
+        else:
+            stmt = stmt.offset(max(page - 1, 0) * size)
+        stmt = stmt.order_by(Mail.received_at.desc(), Mail.id.desc()).limit(size)
         rows = self.session.scalars(stmt).unique().all()
         return [serialize_mail(m) for m in rows], total
 
@@ -344,6 +385,112 @@ class MailService:
         )
         self.session.commit()
         return serialize_draft(draft)
+
+    def send_latest_draft(
+        self, mail_id: int, *, reviewer_id: str, body: str | None = None
+    ) -> dict:
+        """``POST /mails/{id}/reply/send``：把该邮件最新待审草稿审核并发送。"""
+        mail = self.session.get(Mail, mail_id)
+        if mail is None:
+            raise LookupError(f"邮件不存在: {mail_id}")
+        pending = [d for d in mail.drafts if d.status in {"pending_review", "draft", "approved"}]
+        if not pending:
+            raise LookupError("该邮件没有待发送的回复草稿")
+        draft = max(pending, key=lambda d: d.id)
+        return self.approve_draft(draft.id, reviewer_id=reviewer_id, body=body, actor=f"user:{reviewer_id}")
+
+    # ------------------------------------------------------------ 规则试算
+    def test_rules(
+        self,
+        *,
+        raw: str | None = None,
+        subject: str = "",
+        from_addr: str = "",
+        body: str = "",
+    ) -> dict:
+        """规则命中测试器（Phase 6）：只计算不落库，回答"为什么"。
+
+        刻意不调用 LLM，保证结果稳定、可复现，便于运营调规则。
+        """
+        from mailmind.ml.classify import EmailClassifier
+        from mailmind.ml.rules import RuleSet
+        from mailmind.ml.spam import SpamFilter
+        from mailmind.pipeline.features import build_features
+        from mailmind.pipeline.parse import parse_message
+
+        if raw:
+            payload = raw.encode("utf-8")
+        else:
+            sender = from_addr or "test@example.com"
+            payload = (
+                f"From: {sender}\r\nTo: support@example.com\r\nSubject: {subject}\r\n"
+                "Message-ID: <rule-test@mailmind.local>\r\n"
+                "Content-Type: text/plain; charset=utf-8\r\n\r\n" + body
+            ).encode("utf-8")
+        parsed = parse_message(payload)
+        features = build_features(parsed)
+        ruleset = RuleSet.from_db(self.session, None)
+        hits = ruleset.evaluate(features)
+        spam = SpamFilter(self.settings, ruleset, self.runtime.spam_model, None).evaluate(features)
+        classification = EmailClassifier(
+            self.settings, ruleset, self.runtime.category_model, None
+        ).classify(features, is_spam=spam.label != "ham")
+        return {
+            "spam": spam.to_dict(),
+            "classification": classification.to_dict(),
+            "rule_hits": [hit.to_reason() for hit in hits],
+            "features": {
+                "from_addr": features.from_addr,
+                "from_domain": features.from_domain,
+                "subject": features.subject,
+                "text_length": features.text_length,
+                "url_domains": features.url_domains,
+                "risky_attachments": features.risky_attachments,
+                "auth": {"spf": features.spf, "dkim": features.dkim, "dmarc": features.dmarc},
+                "sender_seen": features.sender_seen,
+                "sender_spam_ratio": features.sender_spam_ratio,
+            },
+        }
+
+    # ------------------------------------------------------------ 审计与反馈
+    def list_audit(self, *, limit: int = 100, action: str | None = None) -> list[dict]:
+        stmt = select(AuditLog).order_by(AuditLog.id.desc()).limit(min(limit, 500))
+        if action:
+            stmt = stmt.where(AuditLog.action.like(f"{action}%"))
+        return [
+            {
+                "id": row.id,
+                "actor": row.actor,
+                "action": row.action,
+                "target": row.target,
+                "detail": row.detail,
+                "trace_id": row.trace_id,
+                "created_at": _iso(row.created_at),
+            }
+            for row in self.session.scalars(stmt).all()
+        ]
+
+    def list_feedback(
+        self, *, mail_id: int | None = None, task: str | None = None, limit: int = 100
+    ) -> list[dict]:
+        stmt = select(Feedback).order_by(Feedback.id.desc()).limit(min(limit, 500))
+        if mail_id is not None:
+            stmt = stmt.where(Feedback.mail_id == mail_id)
+        if task:
+            stmt = stmt.where(Feedback.task == task)
+        return [
+            {
+                "id": row.id,
+                "mail_id": row.mail_id,
+                "source": row.source,
+                "task": row.task,
+                "label": row.label,
+                "note": row.note,
+                "weight": row.weight,
+                "created_at": _iso(row.created_at),
+            }
+            for row in self.session.scalars(stmt).all()
+        ]
 
     # ------------------------------------------------------------ 统计
     def overview(self) -> dict:

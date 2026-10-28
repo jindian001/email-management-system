@@ -15,7 +15,7 @@ from typing import Any
 
 import httpx
 
-from mailmind.connectors.base import ConnectorError, FetchPage, FetchedMessage, Folder
+from mailmind.connectors.base import ConnectorError, FetchedMessage, FetchPage, Folder
 
 GRAPH_BASE = "https://graph.microsoft.com/v1.0"
 

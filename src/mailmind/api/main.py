@@ -14,7 +14,7 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from mailmind import __version__
-from mailmind.api.routers import accounts, kb, mails, quarantine, replies, rules, system
+from mailmind.api.routers import accounts, admin, kb, mails, quarantine, replies, rules, system
 from mailmind.core.config import Settings, get_settings
 from mailmind.core.logging import configure_logging, get_logger, new_trace_id, set_trace_id
 from mailmind.db.session import init_db, make_engine, make_session_factory
@@ -93,6 +93,7 @@ def create_app(
     app.include_router(replies.router)
     app.include_router(rules.router)
     app.include_router(kb.router)
+    app.include_router(admin.router)
 
     if STATIC_DIR.is_dir():
         app.mount("/ui", StaticFiles(directory=str(STATIC_DIR), html=True), name="ui")
