@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -99,6 +100,22 @@ def cmd_demo(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_llm_check(_args: argparse.Namespace) -> int:
+    """验证 LLM 配置：发一条最小请求，打印网关、耗时与结果摘要。"""
+    from mailmind.ml.llm import TemplateGateway, build_gateway, probe_gateway
+
+    settings = get_settings()
+    gateway = build_gateway(settings)
+    print(f"provider={settings.llm_provider}  model={settings.llm_model}  gateway={gateway.name}")
+    if isinstance(gateway, TemplateGateway):
+        print("提示：当前是 template 模式（provider!=openai 或未配置 MAILMIND_LLM_API_KEY），不会调用真实模型。")
+    result = probe_gateway(gateway)
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    if result.get("fallback_error"):
+        print(f"注意：真实网关失败并已降级到模板，原因：{result['fallback_error']}")
+    return 0 if result.get("ok") else 1
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="mailmind", description="智能邮箱管理系统")
     parser.add_argument("--version", action="version", version=f"mailmind {__version__}")
@@ -123,6 +140,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_ingest.add_argument("--file", required=True)
     p_ingest.add_argument("--folder", default="INBOX")
     p_ingest.set_defaults(func=cmd_ingest)
+
+    p_llm = sub.add_parser("llm-check", help="验证 LLM 配置是否可用（发一条最小请求）")
+    p_llm.set_defaults(func=cmd_llm_check)
 
     p_sync = sub.add_parser("sync", help="同步一个 IMAP 账号")
     p_sync.add_argument("--account-id", type=int, required=True)

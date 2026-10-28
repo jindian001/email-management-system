@@ -120,6 +120,8 @@ class Settings(BaseSettings):
     llm_model: str = "deepseek-chat"
     llm_timeout_seconds: float = 30.0
     llm_max_retries: int = 1
+    # 兼容服务是否支持 response_format=json_object；不支持时保持 false（靠提示词）
+    llm_json_mode: bool = False
 
     # ---------- 模型 ----------
     model_dir: str = "./var/models"

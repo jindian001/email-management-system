@@ -132,7 +132,10 @@ IMAP/Gmail/Graph ──► 解析(MIME) ──► 特征工程 ──► 垃圾�
 | `MAILMIND_AUTO_REPLY_SEND_MODE` | `review` | `review` 人工审核 / `auto` 高置信自动发送 |
 | `MAILMIND_AUTO_REPLY_COOLDOWN_HOURS` | 24 | 同一发件人冷却期 |
 | `MAILMIND_QUIET_HOURS_START/END` | 空 | 免打扰时段，如 `22:00` / `08:00` |
-| `MAILMIND_LLM_PROVIDER` | `template` | `template` 离线确定性 / `openai` 兼容 DeepSeek 等 |
+| `MAILMIND_LLM_PROVIDER` | `template` | `template` 离线确定性 / `openai` 兼容 DeepSeek、Qwen、vLLM、Ollama |
+| `MAILMIND_LLM_BASE_URL` / `LLM_MODEL` / `LLM_API_KEY` | DeepSeek 默认 | 换供应商只改这三个；`mailmind llm-check` 可自检 |
+| `MAILMIND_LLM_MAX_RETRIES` | 1 | 调用失败重试次数，最终失败自动降级 template |
+| `MAILMIND_LLM_JSON_MODE` | false | 服务支持 `response_format=json_object` 时打开 |
 | `MAILMIND_COOLDOWN_BACKEND` | `memory` | `redis` 时多实例共享冷却，Redis 不可用自动降级 |
 | `MAILMIND_API_RATE_LIMIT_PER_MINUTE` | 0 | >0 时按 `X-API-Key`/IP 限流，超限 429 |
 | `MAILMIND_STORAGE_BACKEND` | `local` | `local` / `memory` / `s3`（需 `pip install 'mailmind[s3]'`） |
@@ -160,7 +163,7 @@ tests/           仅本地保留（不推送）
 ## 测试
 
 ```bash
-make test        # 292 passed, 1 skipped
+make test        # 307 passed, 1 skipped
 make lint        # ruff + mypy
 ```
 
