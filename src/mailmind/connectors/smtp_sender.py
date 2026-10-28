@@ -7,7 +7,8 @@
 from __future__ import annotations
 
 import smtplib
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from mailmind.connectors.base import OutgoingMessage, SendError, build_mime
 

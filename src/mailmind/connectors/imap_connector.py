@@ -10,13 +10,13 @@ from __future__ import annotations
 
 import imaplib
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from mailmind.connectors.base import (
     ConnectorError,
-    FetchPage,
     FetchedMessage,
+    FetchPage,
     Folder,
 )
 
@@ -57,7 +57,7 @@ def parse_fetch_meta(meta: bytes) -> tuple[str, list[str], datetime | None]:
         try:
             received = datetime.strptime(
                 internal.group(1).decode(), "%d-%b-%Y %H:%M:%S %z"
-            ).astimezone(timezone.utc)
+            ).astimezone(UTC)
         except ValueError:
             received = None
     return uid, flags, received
@@ -128,8 +128,9 @@ class ImapConnector:
             if not isinstance(line, bytes):
                 continue
             text = line.decode("utf-8", "replace")
-            parts = text.rsplit('"', 2)
-            name = parts[-1].strip().strip('"') if parts else text
+            # 形如：(\HasNoChildren) "/" "INBOX"  —— 文件夹名是最后一个引号串
+            quoted = re.findall(r'"([^"]*)"', text)
+            name = quoted[-1].strip() if quoted else text.strip()
             if name:
                 folders.append(Folder(name=name))
         return folders

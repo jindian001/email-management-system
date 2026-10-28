@@ -7,9 +7,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Protocol
-
 from email.message import EmailMessage
+from typing import Protocol
 
 # ---------------------------------------------------------------- 数据模型
 

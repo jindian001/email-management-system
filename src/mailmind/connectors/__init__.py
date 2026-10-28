@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from mailmind.connectors.base import (
     ConnectorError,
-    FetchPage,
     FetchedMessage,
+    FetchPage,
     Folder,
     MailConnector,
     MemoryConnector,

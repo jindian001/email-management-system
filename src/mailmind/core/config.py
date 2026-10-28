@@ -39,6 +39,7 @@ class Settings(BaseSettings):
 
     # ---------- 安全 ----------
     api_key: str = ""
+    secret_key: str = "mailmind-dev-insecure-key"
     cors_origins: list[str] = Field(default_factory=lambda: ["*"])
 
     # ---------- 垃圾邮件过滤 ----------

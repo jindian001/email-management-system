@@ -10,6 +10,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from sqlalchemy import Engine, create_engine, event
+from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -20,15 +21,17 @@ from mailmind.db.models import Base
 def make_engine(settings: Settings) -> Engine:
     url = settings.database_url
     kwargs: dict = {"future": True, "pool_pre_ping": True}
-    if url.startswith("sqlite"):
-        if ":memory:" in url or url.endswith("sqlite://") or "://" not in url:
+    try:
+        parsed = make_url(url)
+    except Exception:  # noqa: BLE001 - 非法 URL 交给 create_engine 报错
+        parsed = None
+
+    if parsed is not None and parsed.get_backend_name() == "sqlite":
+        if parsed.database in (None, "", ":memory:"):
             kwargs["connect_args"] = {"check_same_thread": False}
             kwargs["poolclass"] = StaticPool
         else:
-            # 确保目录存在
-            raw = url.split("///", 1)[-1]
-            if raw and raw not in (":memory:", ""):
-                Path(raw).parent.mkdir(parents=True, exist_ok=True)
+            Path(parsed.database).parent.mkdir(parents=True, exist_ok=True)
     engine = create_engine(url, **kwargs)
     if url.startswith("sqlite"):
 
