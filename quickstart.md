@@ -357,6 +357,7 @@ docker compose up --build
 | `llm-check` 报 401 | API Key 错误/过期，或该服务需要额外的鉴权头 |
 | `llm-check` 报 timeout / connection | `BASE_URL` 写错、本地模型没起、或需要代理 |
 | 报 `model not found` | `MAILMIND_LLM_MODEL` 与服务端实际模型名不一致（Ollama 要带 tag，如 `qwen2.5:7b`） |
+| `curl` 返回 `000` | 不是 HTTP 码，是**连不上**：服务没起、端口不对或被杀掉了。先 `lsof -i :8080` 看监听，再 `make serve` |
 | 接口 401 | 配了 `MAILMIND_API_KEY`，请求要带 `X-API-Key`（管理台右上角填写），见 3.3 |
 | 管理台一直提示加载失败 401 | 后端开了鉴权但页面没填 key；填右上角输入框后会自动刷新 |
 | `/ui` 打不开 | 必须访问 `/ui/`（带尾斜杠）；没构建就先 `make web` |
