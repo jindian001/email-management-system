@@ -50,6 +50,39 @@ make serve
 
 右上角输入 `X-API-Key`（仅当后端配置了 `MAILMIND_API_KEY` 时需要），会存在浏览器 localStorage。
 
+### 3.0 先拿到"应用专用密码"
+
+MailMind 不生成这个密码，它是**邮箱服务商**发给你的"客户端专用密码/授权码"，用来替代主密码登录 IMAP/SMTP。
+各家入口：
+
+| 邮箱 | 生成位置 | 备注 |
+|---|---|---|
+| QQ 邮箱 | 设置 → 账号 → POP3/IMAP/SMTP 服务 → 生成授权码 | 16 位，需要短信验证 |
+| 163 / 126 | 设置 → POP3/SMTP/IMAP → 开启服务 → 新增授权密码 | |
+| Gmail | 先开两步验证 → Google 账号 → 安全性 → 应用专用密码 | 16 位 |
+| Outlook / M365 | 安全性 → 高级安全选项 → 应用密码 | 需先开两步验证 |
+| iCloud | Apple ID → 登录与安全 → App 专用密码 | |
+| 企业邮箱 | 邮箱设置里的"客户端专用密码"，或找 IT | Exchange 可能只支持 OAuth |
+
+如果之前在 **Mac 的「邮件」App** 里配过这个邮箱，可以从钥匙串找回：
+
+```
+打开「钥匙串访问」→ 搜索邮箱地址 → 双击条目 → 勾选"显示密码"→ 输入 Mac 登录密码
+```
+
+拿到后先用系统自带工具验证一次，能登录再用到 MailMind：
+
+```bash
+python3 - <<'PY'
+import imaplib
+m = imaplib.IMAP4_SSL("imap.qq.com", 993)
+print(m.login("you@qq.com", "你的授权码"))
+print(m.list())
+PY
+```
+
+把 host 换成你自己的 IMAP 地址。返回 `('OK', ...)` 就说明密码可用。
+
 ## 3. 接自己的邮箱
 
 ```bash
@@ -385,6 +418,7 @@ docker compose up --build
 | 现象 | 处理 |
 |---|---|
 | `mailmind: command not found` | `source .venv/bin/activate`，或用 `make` |
+| 忘了应用专用密码 | 去邮箱服务商后台重新生成（见 3.0），或从 macOS 钥匙串找回；MailMind 里可用「改凭据」更新 |
 | `unrecognized arguments: # ...` / `command not found: #` | 命令带了行内注释，只复制 `#` 之前的部分；或先 `setopt interactive_comments` |
 | 配了 LLM 但仍显示 `template` | 没设 `MAILMIND_LLM_API_KEY`，或 `PROVIDER` 不是 `openai`；先跑 `mailmind llm-check` |
 | `llm-check` 报 400 | 服务端拒绝了请求，**看 `fallback_error` 里的响应体**：`Model Not Exist` 是模型名错；`base_url` 与供应商不匹配；或 JSON mode 不被支持 |
