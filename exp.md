@@ -1054,7 +1054,7 @@ MVP 只需证明三件事：① 能稳定收信解析；② 规则+TF-IDF 的 sp
 | BGE-M3 语义 embedding | **确定性 hash 签名投影**（`ml/embeddings.py`） | 离线/无 GPU 可跑，不引推理服务 | 可。换成 BGE-M3 只需实现同一协议 |
 | LLM 默认走真实 API | 默认 `template`：本地确定性生成/复核；`openai` 走 OpenAI 兼容协议（DeepSeek 等） | 测试与离线演示必须可跑，不能依赖网络与密钥 | 可。改环境变量即可 |
 | MinIO / S3 对象存储 | `LocalObjectStore`（按 sha256 寻址）+ `MemoryObjectStore`（测试） | 开发环境无需额外服务；接口按 S3 语义定义 | 可。实现 `put/get/exists` 即可 |
-| React + Vite 管理台 | 无构建静态单页（`src/mailmind/static/index.html`），fetch 调用 REST API | 避免引入 node 构建链；后端可测性优先 | 可。API 契约不变 |
+| React + Vite 管理台 | **React 19 + TypeScript + Vite 已落地**（`web/`），产物输出到 `src/mailmind/static/` 由 FastAPI 托管在 `/ui/`；接口清单集中在 `web/src/api-paths.json` | 交付可维护的前端；构建产物入库，`make serve` 无需 node；接口漂移由测试守护 | 可。接口契约不变，构建产物可随时替换 |
 | imapclient | **stdlib imaplib**（`connectors/imap_connector.py`） | 少一个依赖；UIDVALIDITY/UID 逻辑自持，解析函数可独立单测 | 可 |
 | 只做 IMAP 接入 | **Gmail API / Microsoft Graph 读取连接器已实现**（REST + 注入 `httpx.Client`，MockTransport 全覆盖），Gmail 另提供发送器 | exp 4.1 要求多提供商；不引入 google/microsoft SDK，测试可完全离线 | 可 |
 | 对象存储只做本地 | **S3/MinIO 兼容实现**（boto3 惰性加载、client 可注入、Stubber 测试） | 生产需要对象存储；未安装 boto3 时 local/memory 后端不受影响 | 可 |
@@ -1090,8 +1090,9 @@ src/mailmind/
 ├── services/      # 业务编排（接入、处理链、查询）
 ├── tasks/         # Celery 任务
 ├── api/           # FastAPI 路由
-├── static/        # 无构建管理台
+├── static/        # 前端构建产物（由 web/ 生成，入库）
 └── cli.py         # 命令行入口
+web/               # React 19 + TS + Vite 源码（src/api-paths.json 为接口清单）
 tests/             # 仅本地（不推送）
 ```
 
@@ -1127,7 +1128,7 @@ REST 路径与 4.9 节保持一致；新增辅助接口（`/api/v1/health`、`/a
 
 | 项 | 结果 |
 |---|---|
-| 单元 + 集成测试 | **293 passed + 1 skipped**（`make test`，全程离线；跳过项是需真实 PG 的用例，配 `MAILMIND_TEST_PG_URL` 可开启） |
+| 单元 + 集成测试 | **292 passed + 1 skipped**（`make test`，全程离线；跳过项是需真实 PG 的用例，配 `MAILMIND_TEST_PG_URL` 可开启） |
 | 代码规范 | `ruff check src` 全绿 |
 | 垃圾过滤 | 独立小样本（12 spam / 12 ham）：召回 ≥ 0.7、误杀 ≤ 0.25、无正常邮件被隔离 |
 | 自动回复 | 命中知识库才生成草稿；无引用、空回复、PII 泄露一律拒绝；敏感承诺/提示注入转人工 |
@@ -1138,4 +1139,4 @@ REST 路径与 4.9 节保持一致；新增辅助接口（`/api/v1/health`、`/a
 | 对象存储 | 本地/内存/S3 三后端；S3 用 botocore Stubber 验证 put/get/exists 与错误分支 |
 | 可靠性与运维 | Redis 冷却（不可用自动降级）、API 限流（429 + Retry-After）、审计与反馈查询、游标分页 |
 | PostgreSQL 兼容 | 全部 DDL/索引以 PG 方言编译校验（标识符长度、JSON/BOOLEAN 类型），并保留真实 PG 端到端用例 |
-| 管理台 | 9 个页面覆盖收件箱/详情/隔离区/审核/账号/规则试算/知识库/审计/反馈；前端调用与 OpenAPI 路径的一致性、tab 与渲染函数映射均有测试守护 |
+| 管理台 | React 19 + TS + Vite，9 个页面（总览/收件箱/详情/隔离区/审核/账号/规则试算/知识库/审计/反馈）；构建产物由 FastAPI 托管，接口清单与 OpenAPI 一致性、构建产物可访问性均有测试守护 |

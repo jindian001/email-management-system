@@ -1,10 +1,11 @@
 PY := .venv/bin/python
 PIP := uv pip install --python .venv/bin/python
 
-.PHONY: help venv install migrate test lint fmt demo serve train clean
+.PHONY: help venv install migrate web test lint fmt demo serve train clean
 
 help:
 	@echo "make install  - 创建 venv 并安装依赖"
+	@echo "make web      - 构建前端（React + Vite → src/mailmind/static）"
 	@echo "make migrate  - 执行数据库迁移 (alembic upgrade head)"
 	@echo "make test     - 运行全部测试"
 	@echo "make lint     - ruff + mypy"
@@ -20,6 +21,9 @@ install: venv
 
 migrate:
 	PYTHONPATH=src $(PY) -m alembic upgrade head
+
+web:
+	cd web && pnpm install && pnpm build
 
 test:
 	PYTHONPATH=src $(PY) -m pytest -q

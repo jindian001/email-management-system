@@ -1,0 +1,138 @@
+# MailMind 快速上手
+
+智能邮箱管理系统：**垃圾过滤 + 自动分类 + 自动回复**。后端 FastAPI，管理台 React + Vite。
+完整设计与实现说明见 [exp.md](exp.md)，工程与接口清单见 [README.md](README.md)。
+
+---
+
+## 1. 三条命令跑起来
+
+```bash
+cd ~/Documents/助手
+make install        # 建 .venv 并安装依赖（可重复执行）
+make demo           # 演示账号 + 知识库 + 3 封样例邮件（可重复执行）
+make serve          # 默认 8080
+```
+
+打开 <http://127.0.0.1:8080/ui/>，`/docs` 是 OpenAPI 在线调试。
+
+> 不想激活虚拟环境时，等价命令是 `PYTHONPATH=src .venv/bin/python -m mailmind.cli demo|serve`。
+
+演示数据会呈现三种典型结果：
+
+| 样例 | 结果 |
+|---|---|
+| 顾客问退货 | 分类 `consult` → 自动生成回复草稿（待审核）|
+| 中奖 + IP 链接 | 判 `phishing` → 进隔离区，不回复 |
+| 9 月对账单 | 分类 `billing` → 归档，不自动回复 |
+
+## 2. 管理台（9 个页面）
+
+| 页面 | 用来做什么 |
+|---|---|
+| 总览 | 邮件量、垃圾率、待审/隔离数、分类与判定分布 |
+| 收件箱 | 搜索、状态/类别过滤、游标翻页、一键 AI 起草 |
+| 邮件详情 | 正文、附件、**判定分数与命中原因**、草稿、同会话、下载原始 EML |
+| 隔离区 | 放行（自动加白名单）、删除 |
+| 自动回复审核 | 改草稿 → 通过发送 / 拒绝 |
+| 账号 | 新建 IMAP/Gmail/Graph 账号、同步、删除 |
+| 规则 | 增删启停 + **规则试算**（输入一封邮件看判定与命中规则） |
+| 知识库 | 导入（自动切片）、检索测试、删除 |
+| 审计 / 反馈 | 审计动作追溯、反馈样本、一键重训 |
+
+右上角输入 `X-API-Key`（仅当后端配置了 `MAILMIND_API_KEY` 时需要），会存在浏览器 localStorage。
+
+## 3. 接自己的邮箱
+
+```bash
+curl -s -X POST localhost:8080/api/v1/accounts \
+  -H 'Content-Type: application/json' -d '{
+    "email": "me@company.com",
+    "provider": "imap",
+    "config": {
+      "imap_host": "imap.company.com", "imap_port": 993, "use_ssl": true,
+      "smtp_host": "smtp.company.com", "smtp_port": 587, "smtp_tls": true
+    },
+    "secret": "邮箱应用专用密码（不是登录密码）"
+  }'
+
+curl -s -X POST localhost:8080/api/v1/accounts/1/sync
+```
+
+- `secret` 用 `MAILMIND_SECRET_KEY` 派生的密钥加密存储，**建账号后不要再改这个值**。
+- Gmail：`provider=gmail`，`secret` 填 OAuth access token；Graph 同理（发信走 SMTP）。
+- 同步是增量的（IMAP 用 UIDVALIDITY/UID，Gmail 用 historyId，Graph 用 receivedDateTime），重复执行不会产生重复邮件。
+
+## 4. 两个开关
+
+```bash
+# 让高置信度回复真的自动发出去（默认人工审核）
+export MAILMIND_AUTO_REPLY_SEND_MODE=auto
+export MAILMIND_AUTO_REPLY_MIN_CONFIDENCE=0.85
+
+# 接真实大模型（默认 template 是离线确定性生成）
+export MAILMIND_LLM_PROVIDER=openai
+export MAILMIND_LLM_API_KEY=sk-xxx
+export MAILMIND_LLM_MODEL=deepseek-chat
+```
+
+即使开了 `auto`，以下情况仍强制转人工：SPF/DKIM 失败、类别不在白名单、对方是自动回复/退信/邮件列表、
+24h 内已回过、线程深度 >3、免打扰时段、无知识库引用、含价格承诺或个人信息。
+
+## 5. 常用命令
+
+```bash
+mailmind demo                      # 演示数据
+mailmind serve --port 8090         # 换端口
+mailmind train                     # 用反馈数据重训
+mailmind ingest --account-id 1 --file invoice.eml
+mailmind sync --account-id 1 --limit 200
+```
+
+## 6. 前端开发 / 重新构建
+
+仓库已包含构建产物（`src/mailmind/static/`），直接 `make serve` 即可。
+改前端后：
+
+```bash
+make web                           # = cd web && pnpm install && pnpm build
+# 或热更新开发（/api 代理到 8080）
+cd web && pnpm dev                 # http://127.0.0.1:5173/ui/
+```
+
+接口路径统一登记在 `web/src/api-paths.json`，新增接口时先加清单，测试会校验它是否存在于 OpenAPI。
+
+## 7. 测试
+
+```bash
+make test        # 292 passed, 1 skipped（离线，不依赖邮箱/网络/Redis）
+make lint
+MAILMIND_TEST_PG_URL=postgresql+psycopg://user:pass@localhost:5432/mailmind_test make test  # 打开真实 PG 用例
+```
+
+## 8. Docker 部署
+
+```bash
+docker compose up --build      # 前端多阶段构建 + API + PG + Redis + worker
+```
+
+## 9. 数据与重置
+
+```
+var/mailmind.db     SQLite（生产改 MAILMIND_DATABASE_URL 指向 PG）
+var/raw/            原始 .eml（按 sha256 存放，可重放）
+var/models/         spam_model.json / category_model.json
+```
+
+重置：`rm -rf var && make demo`。
+
+## 10. 常见问题
+
+| 现象 | 处理 |
+|---|---|
+| `mailmind: command not found` | `source .venv/bin/activate`，或用 `make` |
+| 接口 401 | 配了 `MAILMIND_API_KEY`，请求带 `X-API-Key`（管理台右上角填写）|
+| `/ui` 打不开 | 必须访问 `/ui/`（带尾斜杠）；没构建就先 `make web` |
+| sync 返回 400 | `provider=memory` 需要注入连接器；imap 账号要填 `config.imap_host` |
+| 回复没自动发 | 默认 `review` 模式，去「自动回复审核」点通过；或命中冷却/免打扰 |
+| 改了 `MAILMIND_SECRET_KEY` 后收不到信 | 旧凭据解不开，需重建账号或恢复原密钥 |

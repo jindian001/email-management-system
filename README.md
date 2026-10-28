@@ -7,7 +7,7 @@
 - 接入：IMAP、Gmail API、Microsoft Graph（读取）；SMTP / Gmail API（发送）
 - 存储：PostgreSQL（生产）/ SQLite（测试）；对象存储支持本地目录、内存、S3/MinIO
 - 模型：纯 Python TF-IDF + 朴素贝叶斯（零依赖、确定性）+ 规则引擎 + LLM 复核与起草
-- 前端：无构建管理台（`/ui/`，index.html + app.js + style.css），直接调用 REST API
+- 前端：React 19 + TypeScript + Vite 管理台（源码 `web/`，构建产物由 FastAPI 托管在 `/ui/`）
 
 ## 数据库迁移
 
@@ -63,7 +63,7 @@ curl -s -X POST localhost:8080/api/v1/replies/1/approve \
 
 ## 管理台（`/ui/`）
 
-9 个页面，全部走真实 API，不需要前端构建：
+React + TypeScript + Vite 构建，产物随仓库发布（无需装 node 即可运行）；9 个页面全部走真实 API：
 
 | 页面 | 能力 |
 |---|---|
@@ -151,7 +151,8 @@ src/mailmind/
 ├── services/    接入、处理链、查询、知识库、训练、审计
 ├── tasks/       Celery 应用与任务
 ├── api/         FastAPI 应用、依赖、路由
-└── static/      管理台单页
+└── static/      前端构建产物（由 web/ 生成）
+web/             React 19 + TS + Vite 源码（api-paths.json 为接口清单）
 migrations/      Alembic 迁移（alembic.ini 在仓库根目录）
 tests/           仅本地保留（不推送）
 ```
@@ -159,7 +160,7 @@ tests/           仅本地保留（不推送）
 ## 测试
 
 ```bash
-make test        # 293 passed, 1 skipped
+make test        # 292 passed, 1 skipped
 make lint        # ruff + mypy
 ```
 
@@ -167,7 +168,7 @@ make lint        # ruff + mypy
 护栏、检索、放行策略（RFC 3834）、生成、发送、接入幂等与 UIDVALIDITY、API 全量、
 IMAP/SMTP/Gmail/Graph 协议解析（假 client 与 MockTransport）、任务函数、对象存储（含 S3 Stubber）、
 凭据加密、Redis 冷却与 API 限流、游标分页、Alembic 迁移一致性、PostgreSQL DDL 兼容性、管理台静态契约
-（tab↔渲染函数、**前端调用 ↔ OpenAPI 路径一致性**、Node 语法校验），以及一个
+（构建产物可访问性、**前端接口清单 ↔ OpenAPI 路径一致性**），以及一个
 **召回率/误杀率验收测试**（`tests/test_quality.py`）。
 
 真实 PG 端到端用例默认跳过，配置后启用：

@@ -12,6 +12,11 @@ __pycache__/
 build/
 dist/
 
+# 前端
+web/node_modules/
+web/.vite/
+.pnpm-store/
+
 # 本地数据
 var/
 data/
