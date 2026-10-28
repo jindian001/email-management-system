@@ -3,20 +3,28 @@
 智能邮箱管理系统：**垃圾过滤 + 自动分类 + 自动回复**。后端 FastAPI，管理台 React + Vite。
 完整设计与实现说明见 [exp.md](exp.md)，工程与接口清单见 [README.md](README.md)。
 
+> ⚠️ 命令块里不放行内注释。macOS 默认的 **zsh 未开启 `interactive_comments`**，
+> 粘贴 `mailmind llm-check   # 说明` 这种带注释的命令会把 `# 说明` 当成参数，
+> 报 `unrecognized arguments: # ...`。只复制命令本身，或先执行 `setopt interactive_comments`。
+
 ---
 
 ## 1. 三条命令跑起来
 
 ```bash
 cd ~/Documents/助手
-make install        # 建 .venv 并安装依赖（可重复执行）
-make demo           # 演示账号 + 知识库 + 3 封样例邮件（可重复执行）
-make serve          # 默认 8080
+make install
+make demo
+make serve
 ```
+
+- `make install`：建 `.venv` 并安装依赖（可重复执行）
+- `make demo`：演示账号 + 知识库 + 3 封样例邮件（可重复执行，不会重复入库）
+- `make serve`：默认 8080
 
 打开 <http://127.0.0.1:8080/ui/>，`/docs` 是 OpenAPI 在线调试。
 
-> 不想激活虚拟环境时，等价命令是 `PYTHONPATH=src .venv/bin/python -m mailmind.cli demo|serve`。
+> 不想激活虚拟环境时，等价命令是 `PYTHONPATH=src .venv/bin/python -m mailmind.cli demo`。
 
 演示数据会呈现三种典型结果：
 
@@ -55,7 +63,11 @@ curl -s -X POST localhost:8080/api/v1/accounts \
     },
     "secret": "邮箱应用专用密码（不是登录密码）"
   }'
+```
 
+同步一次：
+
+```bash
 curl -s -X POST localhost:8080/api/v1/accounts/1/sync
 ```
 
@@ -66,9 +78,11 @@ curl -s -X POST localhost:8080/api/v1/accounts/1/sync
 ## 4. 打开自动发送（可选）
 
 ```bash
-export MAILMIND_AUTO_REPLY_SEND_MODE=auto     # 默认 review：只起草，人工点通过
+export MAILMIND_AUTO_REPLY_SEND_MODE=auto
 export MAILMIND_AUTO_REPLY_MIN_CONFIDENCE=0.85
 ```
+
+第一行默认是 `review`（只起草、人工点通过）；第二行是自动发送所需的最低置信度。
 
 即使开了 `auto`，以下情况仍强制转人工：SPF/DKIM 失败、类别不在白名单、对方是自动回复/退信/邮件列表、
 24h 内已回过、线程深度 >3、免打扰时段、无知识库引用、含价格承诺或个人信息。
@@ -80,14 +94,20 @@ export MAILMIND_AUTO_REPLY_MIN_CONFIDENCE=0.85
 
 ```bash
 export MAILMIND_LLM_PROVIDER=openai
-export MAILMIND_LLM_BASE_URL=https://api.deepseek.com/v1   # 默认值
+export MAILMIND_LLM_BASE_URL=https://api.deepseek.com/v1
 export MAILMIND_LLM_MODEL=deepseek-chat
 export MAILMIND_LLM_API_KEY=sk-xxx
-
-mailmind llm-check        # 关键：发一条最小请求验证配置
 ```
 
-`llm-check` 期望输出（`ok: true` 即接入成功）：
+上面 `BASE_URL` 与 `MODEL` 默认就是 DeepSeek；换成别的服务只改这两项（见下表）。
+
+自检（关键一步，发一条最小请求，不成功就不用往下走）：
+
+```bash
+mailmind llm-check
+```
+
+期望输出（`ok: true` 即接入成功）：
 
 ```json
 {
@@ -113,60 +133,76 @@ mailmind llm-check        # 关键：发一条最小请求验证配置
 | 本地 vLLM | `http://127.0.0.1:8000/v1` | `qwen2.5-7b-instruct` |
 | 本地 Ollama | `http://127.0.0.1:11434/v1` | `qwen2.5:7b` |
 
-还有两个可选参数：
+两个可选参数：
 
 ```bash
-export MAILMIND_LLM_MAX_RETRIES=1       # 失败重试次数（默认 1）
-export MAILMIND_LLM_JSON_MODE=true      # 服务支持 response_format=json_object 时打开，输出更稳
+export MAILMIND_LLM_MAX_RETRIES=1
+export MAILMIND_LLM_JSON_MODE=true
 ```
 
+前者是失败重试次数（默认 1）；后者在服务支持 `response_format=json_object` 时打开，输出更稳。
 模型调用失败（超时/401/返回非 JSON）会自动降级到 template，不会中断收信与回复链路；
 降级原因会出现在 `llm-check` 的 `fallback_error` 和日志 `llm_fallback` 里。
 
 ## 6. 常用命令
 
 ```bash
-mailmind demo                      # 演示数据
-mailmind serve --port 8090         # 换端口
-mailmind train                     # 用反馈数据重训
+mailmind demo
+mailmind serve --port 8090
+mailmind train
+mailmind llm-check
 mailmind ingest --account-id 1 --file invoice.eml
 mailmind sync --account-id 1 --limit 200
 ```
 
+依次是：演示数据、换端口启动、用反馈重训、验证 LLM、导入一封 .eml、同步 IMAP 账号。
+
 ## 7. 前端开发 / 重新构建
 
-仓库已包含构建产物（`src/mailmind/static/`），直接 `make serve` 即可。
-改前端后：
+仓库已包含构建产物（`src/mailmind/static/`），直接 `make serve` 即可。改前端后：
 
 ```bash
-make web                           # = cd web && pnpm install && pnpm build
-# 或热更新开发（/api 代理到 8080）
-cd web && pnpm dev                 # http://127.0.0.1:5173/ui/
+make web
 ```
 
-接口路径统一登记在 `web/src/api-paths.json`，新增接口时先加清单，测试会校验它是否存在于 OpenAPI。
+热更新开发（`/api` 代理到 8080）：
+
+```bash
+cd web
+pnpm dev
+```
+
+访问 <http://127.0.0.1:5173/ui/>。接口路径统一登记在 `web/src/api-paths.json`，新增接口时先加清单，
+测试会校验它是否存在于 OpenAPI。
 
 ## 8. 测试
 
 ```bash
-make test        # 307 passed, 1 skipped（离线，不依赖邮箱/网络/Redis）
+make test
 make lint
-MAILMIND_TEST_PG_URL=postgresql+psycopg://user:pass@localhost:5432/mailmind_test make test  # 打开真实 PG 用例
+```
+
+当前基线：**307 passed, 1 skipped**。跳过的是需要真实 PostgreSQL 的用例，配置后可开启：
+
+```bash
+MAILMIND_TEST_PG_URL=postgresql+psycopg://user:pass@localhost:5432/mailmind_test make test
 ```
 
 ## 9. Docker 部署
 
 ```bash
-docker compose up --build      # 前端多阶段构建 + API + PG + Redis + worker
+docker compose up --build
 ```
+
+前端多阶段构建 + API + PostgreSQL + Redis + worker，启动前自动执行数据库迁移。
 
 ## 10. 数据与重置
 
-```
-var/mailmind.db     SQLite（生产改 MAILMIND_DATABASE_URL 指向 PG）
-var/raw/            原始 .eml（按 sha256 存放，可重放）
-var/models/         spam_model.json / category_model.json
-```
+| 路径 | 内容 |
+|---|---|
+| `var/mailmind.db` | SQLite（生产改 `MAILMIND_DATABASE_URL` 指向 PG） |
+| `var/raw/` | 原始 .eml（按 sha256 存放，可重放） |
+| `var/models/` | `spam_model.json` / `category_model.json` |
 
 重置：`rm -rf var && make demo`。
 
@@ -175,8 +211,9 @@ var/models/         spam_model.json / category_model.json
 | 现象 | 处理 |
 |---|---|
 | `mailmind: command not found` | `source .venv/bin/activate`，或用 `make` |
+| `unrecognized arguments: # ...` / `command not found: #` | 命令带了行内注释，只复制 `#` 之前的部分；或先 `setopt interactive_comments` |
 | 配了 LLM 但仍显示 `template` | 没设 `MAILMIND_LLM_API_KEY`，或 `PROVIDER` 不是 `openai`；先跑 `mailmind llm-check` |
-| `llm-check` 报 401 | API Key 错误/过期，或该服务需要 `api-key` 以外的鉴权头 |
+| `llm-check` 报 401 | API Key 错误/过期，或该服务需要额外的鉴权头 |
 | `llm-check` 报 timeout / connection | `BASE_URL` 写错、本地模型没起、或需要代理 |
 | 报 `model not found` | `MAILMIND_LLM_MODEL` 与服务端实际模型名不一致（Ollama 要带 tag，如 `qwen2.5:7b`） |
 | 接口 401 | 配了 `MAILMIND_API_KEY`，请求带 `X-API-Key`（管理台右上角填写）|

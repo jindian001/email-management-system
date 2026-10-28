@@ -1074,6 +1074,7 @@ MVP 只需证明三件事：① 能稳定收信解析；② 规则+TF-IDF 的 sp
 9. **Graph 的 `sendMail` 不能携带 In-Reply-To/References 等自定义头**：用它发会使回复脱离原会话，因此 Graph 账号统一走 SMTP（Graph 支持 SMTP AUTH），不要为了"统一"而牺牲线程。
 10. **Gmail 的 `raw` 是 base64url 且可能省略 padding**：解码前必须补齐 `=`，否则长邮件偶发解码失败。
 11. **`uv venv` 对已存在的 `.venv` 会直接报错**：`make install` 需写成 `test -d .venv || uv venv .venv`，否则第二次安装就失败。
+12. **macOS 默认 zsh 不把 `#` 当注释**（`interactive_comments` 默认关闭）：文档里 `mailmind llm-check   # 说明` 这种行内注释，用户粘贴后会把 `# 说明` 传给 argparse，报 `unrecognized arguments: # ...`。因此命令块一律不带注释，说明放代码块外（已写入 AGENT.md 第 8 条）。
 
 ### C.3 目录结构（实际）
 

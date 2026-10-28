@@ -12,50 +12,57 @@
 ## 数据库迁移
 
 ```bash
-make migrate                                  # alembic upgrade head
-# 或直接： PYTHONPATH=src .venv/bin/python -m alembic upgrade head
+make migrate
+PYTHONPATH=src .venv/bin/python -m alembic upgrade head
 ```
 
 初始迁移见 `migrations/versions/`，与 ORM 模型保持一致（有测试守护）。
 
 ## 快速开始
 
+> ⚠️ 命令块不含行内注释。macOS 默认的 zsh 未开启 `interactive_comments`，
+> 把 `# 说明` 一起粘贴会被当成参数（`unrecognized arguments: # ...`）。
+
 ```bash
-# 1) 环境
 uv venv .venv
 uv pip install --python .venv/bin/python -e ".[dev]"
-
-# 2) 跑测试（223 个，全部离线，不需要邮箱/网络/Redis）
 make test
-
-# 3) 生成演示数据（内存账号 + 知识库 + 3 封样例邮件）
 make demo
-
-# 4) 启动
 make serve
-# 管理台： http://127.0.0.1:8080/ui/
-# OpenAPI: http://127.0.0.1:8080/docs
 ```
+
+依次是：建虚拟环境并安装、跑测试（全部离线）、生成演示数据、启动服务。
+管理台 <http://127.0.0.1:8080/ui/>，OpenAPI <http://127.0.0.1:8080/docs>。
 
 ### 三分钟走通一遍完整链路
 
+建账号（`provider=memory` 便于本地演示；真实账号用 `imap` 并配置 `imap_host`/`secret`）：
+
 ```bash
-# 建账号（provider=memory 便于本地演示；真实账号用 imap，并配置 imap_host/secret）
 curl -s -X POST localhost:8080/api/v1/accounts \
   -H 'Content-Type: application/json' \
   -d '{"email":"support@example.com","provider":"memory"}'
+```
 
-# 导入知识库
+导入知识库：
+
+```bash
 curl -s -X POST localhost:8080/api/v1/kb/documents \
   -H 'Content-Type: application/json' \
   -d '{"title":"退换货政策","content":"商品签收后 7 天内可无理由退货，运费由买家承担。"}'
+```
 
-# 投递一封咨询邮件（自动分类 → 生成回复草稿）
+投递一封咨询邮件（自动分类 → 生成回复草稿）：
+
+```bash
 curl -s -X POST localhost:8080/api/v1/accounts/1/ingest \
   -H 'Content-Type: application/json' \
   -d '{"raw":"From: tom@customer.com\nTo: support@example.com\nSubject: 退货咨询\nMessage-ID: <m1@customer.com>\n\n我买的东西想退货，运费谁承担？"}'
+```
 
-# 查看待审核草稿 → 审核通过并发送
+查看待审核草稿，然后审核通过并发送：
+
+```bash
 curl -s localhost:8080/api/v1/replies?status=pending_review
 curl -s -X POST localhost:8080/api/v1/replies/1/approve \
   -H 'Content-Type: application/json' -d '{"reviewer_id":"ops"}'
@@ -163,8 +170,8 @@ tests/           仅本地保留（不推送）
 ## 测试
 
 ```bash
-make test        # 307 passed, 1 skipped
-make lint        # ruff + mypy
+make test
+make lint
 ```
 
 测试覆盖：解析/MIME/编码、归一化与 PII、特征、规则引擎、朴素贝叶斯、级联判定、分类、
@@ -184,8 +191,9 @@ MAILMIND_TEST_PG_URL=postgresql+psycopg://user:pass@localhost:5432/mailmind_test
 
 ```bash
 docker compose up --build
-# API: http://localhost:8080   管理台: http://localhost:8080/ui/
 ```
+
+启动后：API <http://localhost:8080>，管理台 <http://localhost:8080/ui/>。
 
 生产清单：PostgreSQL（pgvector 镜像已就绪）、Redis（Celery broker）、域名 SPF/DKIM/DMARC、
 `MAILMIND_API_KEY` 与 `MAILMIND_SECRET_KEY`、备份策略、告警（队列积压/同步延迟/误杀突增）。
