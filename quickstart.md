@@ -43,7 +43,7 @@ make serve
 | 邮件详情 | 正文、附件、**判定分数与命中原因**、草稿、同会话、下载原始 EML |
 | 隔离区 | 放行（自动加白名单）、删除 |
 | 自动回复审核 | 改草稿 → 通过发送 / 拒绝 |
-| 账号 | 新建 IMAP/Gmail/Graph 账号、同步、删除 |
+| 账号 | 新建 IMAP/Gmail/Graph 账号、同步、改凭据、暂停/启用、删除 |
 | 规则 | 增删启停 + **规则试算**（输入一封邮件看判定与命中规则） |
 | 知识库 | 导入（自动切片）、检索测试、删除 |
 | 审计 / 反馈 | 审计动作追溯、反馈样本、一键重训 |
@@ -76,6 +76,102 @@ curl -s -X POST localhost:8080/api/v1/accounts/1/sync
   写进 `.env` 或环境变量，并妥善备份；换了它旧账号的密码就解不开（日志会打 `credential_decrypt_failed`）。
 - Gmail：`provider=gmail`，`secret` 填 OAuth access token；Graph 同理（发信走 SMTP）。
 - 同步是增量的（IMAP 用 UIDVALIDITY/UID，Gmail 用 historyId，Graph 用 receivedDateTime），重复执行不会产生重复邮件。
+
+### 3.1 接入后要做的 7 件事
+
+**① 把历史邮件分批拉完**
+
+同步接口默认一次 100 封。历史邮件多时重复执行，直到 `fetched` 降为 0：
+
+```bash
+curl -s -X POST "localhost:8080/api/v1/accounts/1/sync?limit=500"
+```
+
+游标保存在 `accounts.last_uid`，不用手工维护；重复拉取按 `Message-ID` 幂等，不会重复入库。
+
+**② 先看隔离区，处理误杀**
+
+```bash
+curl -s localhost:8080/api/v1/quarantine
+```
+
+放行会自动把发件域写进白名单：
+
+```bash
+curl -s -X POST "localhost:8080/api/v1/quarantine/12/release?add_allowlist=true"
+```
+
+重要客户建议提前加白，不要等误杀了再救：
+
+```bash
+curl -s -X POST localhost:8080/api/v1/rules \
+  -H 'Content-Type: application/json' \
+  -d '{"kind":"allowlist","action":"ham","payload":{"domains":["customer.com","partner.cn"]},"priority":1,"description":"重要客户与供应商"}'
+```
+
+**③ 建知识库，否则不会起草**
+
+生成回复要求"有依据"（引用必须命中知识片段）。知识库为空时草稿会被护栏拒绝（`no_citation`），
+所以先导入 5–10 条 FAQ：
+
+```bash
+curl -s -X POST localhost:8080/api/v1/kb/documents \
+  -H 'Content-Type: application/json' \
+  -d '{"title":"退换货政策","content":"商品签收后 7 天内可无理由退货，运费由买家承担。","source":"faq"}'
+```
+
+用检索确认能召回：
+
+```bash
+curl -s "localhost:8080/api/v1/kb/search?q=退货 运费&top_k=3"
+```
+
+**④ 先 review，再 auto**
+
+默认 `review`：只起草、人工点通过。观察 1–2 周草稿质量后再打开自动发送：
+
+```bash
+export MAILMIND_AUTO_REPLY_SEND_MODE=auto
+export MAILMIND_AUTO_REPLY_MIN_CONFIDENCE=0.85
+```
+
+能自动回复的类别默认 `consult` / `aftersale` / `booking`，用 `MAILMIND_AUTO_REPLY_CATEGORIES` 调整。
+
+**⑤ 配好自己的发信信誉**
+
+回复能不能送达取决于你域名的 SPF / DKIM / DMARC、PTR 与出口 IP 一致性。这一步不在代码里，
+但不做的话自动回复大概率进对方垃圾箱。程序侧已内置 `Auto-Submitted: auto-replied` 防回环。
+
+**⑥ 用"规则试算"校准阈值**
+
+```bash
+curl -s -X POST localhost:8080/api/v1/rules/test \
+  -H 'Content-Type: application/json' \
+  -d '{"from_addr":"promo@example.com","subject":"限时优惠","body":"点击 http://1.2.3.4/x 领取"}'
+```
+
+返回 spam 分数/动作、命中规则与特征快照。误杀多就调高 `MAILMIND_SPAM_PASS_THRESHOLD` 或加白；
+漏杀多就补关键词/黑名单。
+
+**⑦ 日常闭环**
+
+- 每天看：总览 → 隔离区 → 自动回复审核
+- 有误判：点"是垃圾/非垃圾"，再到「反馈」页点"立即重训"（等价于 `mailmind train`）
+- 排查：审计页按动作过滤，带 trace_id
+- 看指标：垃圾率、草稿采纳率、隔离放行率
+
+### 3.2 接入后常见的特殊情况
+
+| 情况 | 怎么处理 |
+|---|---|
+| 换了邮箱密码，或 Gmail/Graph 的 token 过期 | 管理台账号页点「改凭据」，或 `curl -X PATCH localhost:8080/api/v1/accounts/1 -H 'Content-Type: application/json' -d '{"secret":"新密码"}'`；不用删账号 |
+| 想临时停止同步 | 账号页点「暂停」，或 PATCH `{"status":"paused"}` |
+| 历史邮件太多 | 分批 sync（`limit=500` 重复调用）；单封上限 25 MB，超大邮件会跳过 |
+| 只同步了收件箱 | 每个账号一个 `config.folder`；要同步已发送/垃圾箱就另建账号指向该文件夹 |
+| 担心自己回给自己形成回环 | 已按 RFC 3834 拦截 Auto-Submitted / Precedence / List-Id / 退信 / no-reply，并限制 24h 冷却与线程深度 |
+| 同一封邮件重复到达 | 按 `Message-ID` 幂等，不会重复入库 |
+| 回复没发出去 | 默认 review；或命中冷却/免打扰；或草稿被护栏拒绝（看邮件详情里的 `risk_flags`） |
+| 想换 `MAILMIND_SECRET_KEY` | 换后旧凭据解不开（日志 `credential_decrypt_failed`），需恢复旧 key 或用新 key 重录密码 |
 
 ## 4. 打开自动发送（可选）
 
@@ -157,6 +253,14 @@ mailmind ingest --account-id 1 --file invoice.eml
 mailmind sync --account-id 1 --limit 200
 ```
 
+更新账号凭据（token 过期、改密码时用）：
+
+```bash
+curl -s -X PATCH localhost:8080/api/v1/accounts/1 \
+  -H 'Content-Type: application/json' \
+  -d '{"secret":"新的应用专用密码"}'
+```
+
 依次是：演示数据、换端口启动、用反馈重训、验证 LLM、导入一封 .eml、同步 IMAP 账号。
 
 ## 7. 前端开发 / 重新构建
@@ -184,7 +288,7 @@ make test
 make lint
 ```
 
-当前基线：**311 passed, 1 skipped**。跳过的是需要真实 PostgreSQL 的用例，配置后可开启：
+当前基线：**315 passed, 1 skipped**。跳过的是需要真实 PostgreSQL 的用例，配置后可开启：
 
 ```bash
 MAILMIND_TEST_PG_URL=postgresql+psycopg://user:pass@localhost:5432/mailmind_test make test

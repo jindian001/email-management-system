@@ -60,6 +60,31 @@ export function AccountsPage() {
     }
   };
 
+  const updateSecret = async (account: Account) => {
+    const secret = window.prompt(
+      `为 ${account.email} 输入新的密码 / Access Token（留空表示清除凭据）`,
+    );
+    if (secret === null) return;
+    try {
+      await api("account", { params: { id: account.id }, method: "PATCH", body: { secret } });
+      toast("凭据已更新", "ok");
+      list.reload();
+    } catch (exc) {
+      toast(String(exc), "err");
+    }
+  };
+
+  const toggleStatus = async (account: Account) => {
+    const next = account.status === "active" ? "paused" : "active";
+    try {
+      await api("account", { params: { id: account.id }, method: "PATCH", body: { status: next } });
+      toast(next === "paused" ? "已暂停同步" : "已恢复", "ok");
+      list.reload();
+    } catch (exc) {
+      toast(String(exc), "err");
+    }
+  };
+
   const remove = async (account: Account) => {
     if (!window.confirm(`删除账号 ${account.email} 会级联删除其邮件，确认？`)) return;
     try {
@@ -191,6 +216,12 @@ export function AccountsPage() {
               <>
                 <button className="act" onClick={() => sync(account)}>
                   同步
+                </button>
+                <button className="act" onClick={() => updateSecret(account)}>
+                  改凭据
+                </button>
+                <button className="act" onClick={() => toggleStatus(account)}>
+                  {account.status === "active" ? "暂停" : "启用"}
                 </button>
                 <button className="act danger" onClick={() => remove(account)}>
                   删除

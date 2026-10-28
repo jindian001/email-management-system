@@ -16,6 +16,18 @@ class AccountIn(BaseModel):
     secret: str = ""
 
 
+class AccountPatch(BaseModel):
+    """部分更新：只传要改的字段。
+
+    典型用途：Gmail/Graph 的 access token 过期后回写、邮箱改密码、暂停账号。
+    """
+
+    display_name: str | None = None
+    config: dict[str, Any] | None = None
+    secret: str | None = None
+    status: Literal["active", "paused"] | None = None
+
+
 class AccountOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

@@ -106,7 +106,7 @@ IMAP/Gmail/Graph ──► 解析(MIME) ──► 特征工程 ──► 垃圾�
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | GET | `/api/v1/health` | 健康检查（公开） |
-| POST/GET/DELETE | `/api/v1/accounts` `/api/v1/accounts/{id}` | 账号管理 |
+| POST/GET/PATCH/DELETE | `/api/v1/accounts` `/api/v1/accounts/{id}` | 账号管理（PATCH 用于更新凭据/暂停） |
 | POST | `/api/v1/accounts/{id}/ingest` | 投递一封原始邮件（联调/回放） |
 | POST | `/api/v1/accounts/{id}/sync` | 增量同步（provider=memory 时需注入 MemoryConnector 测试替身） |
 | GET | `/api/v1/mails` | 列表，支持 `account_id/status/category/spam_action/q/page/size/cursor`（返回 `next_cursor`） |

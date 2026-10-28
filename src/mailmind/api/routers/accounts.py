@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from mailmind.api.deps import get_app_settings, get_runtime, get_session, require_api_key
-from mailmind.api.schemas import AccountIn, AccountOut, IngestIn, IngestOut, SyncOut
+from mailmind.api.schemas import AccountIn, AccountOut, AccountPatch, IngestIn, IngestOut, SyncOut
 from mailmind.connectors.factory import build_connector
 from mailmind.core.config import Settings
 from mailmind.core.security import secret_box
@@ -49,6 +49,48 @@ def get_account(account_id: int, session: Session = Depends(get_session)) -> Acc
     account = session.get(Account, account_id)
     if account is None:
         raise HTTPException(status_code=404, detail="账号不存在")
+    return account
+
+
+@router.patch("/{account_id}", response_model=AccountOut)
+def update_account(
+    account_id: int,
+    payload: AccountPatch,
+    session: Session = Depends(get_session),
+    settings: Settings = Depends(get_app_settings),
+) -> Account:
+    """更新账号配置/凭据（token 过期、改密码、暂停同步都走这里）。"""
+    account = session.get(Account, account_id)
+    if account is None:
+        raise HTTPException(status_code=404, detail="账号不存在")
+
+    if payload.display_name is not None:
+        account.display_name = payload.display_name
+    if payload.config is not None:
+        account.config = payload.config
+    if payload.status is not None:
+        account.status = payload.status
+    if payload.secret is not None:
+        account.secret_enc = secret_box(settings).encrypt(payload.secret) if payload.secret else ""
+
+    from mailmind.services import audit
+
+    audit.record(
+        session,
+        actor="api",
+        action="account.updated",
+        target=f"account:{account.id}",
+        detail={
+            "fields": [
+                name
+                for name in ("display_name", "config", "secret", "status")
+                if getattr(payload, name) is not None
+            ],
+            "secret_changed": payload.secret is not None,
+        },
+    )
+    session.commit()
+    session.refresh(account)
     return account
 
 
