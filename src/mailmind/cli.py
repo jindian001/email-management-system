@@ -71,67 +71,31 @@ def cmd_sync(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_demo(_args: argparse.Namespace) -> int:
-    """一键演示：内存账号 + 知识库 + 三封样例邮件。"""
+def cmd_demo(args: argparse.Namespace) -> int:
+    """一键演示：内存账号 + 知识库 + 三封样例邮件（可重复执行）。"""
     from mailmind.api.main import create_app
     from mailmind.core.config import Settings
-    from mailmind.db.models import Account
-    from mailmind.services.ingest import IngestService
-    from mailmind.services.kb import KnowledgeService
+    from mailmind.services.demo import seed_demo
 
     base = get_settings()
     settings = Settings(**{**base.model_dump(), "auto_reply_send_mode": "review"})
     app = create_app(settings)
-    runtime = app.state.runtime
     session = app.state.session_factory()
+    try:
+        result = seed_demo(settings, session, app.state.runtime)
+    finally:
+        session.close()
 
-    account = Account(email="support@example.com", provider="memory", display_name="演示客服邮箱")
-    session.add(account)
-    session.commit()
-
-    kb = KnowledgeService(settings, session, runtime.retriever(session))
-    kb.add_document(
-        "退换货政策",
-        "商品签收后 7 天内可无理由退货，运费由买家承担。\n\n若商品存在质量问题，退换货运费由我们承担，请在售后页面提交照片凭证。",
+    for item in result.messages:
+        print(f"{item['name']}: {item['status']}")
+    print(
+        f"\n账号 #{result.account_id}"
+        + ("（新建）" if result.account_created else "（复用已有）")
+        + f" · 新增邮件 {result.ingested} · 跳过重复 {result.duplicates} · 知识库新增 {result.knowledge_docs}"
     )
-    kb.add_document(
-        "发票与对账",
-        "发票默认开具增值税普通发票，下单时可在备注中填写抬头与税号。\n\n对账单每月 1 日生成，可在财务中心下载。",
-    )
-    kb.add_document(
-        "服务时间",
-        "客服工作时间为工作日 9:00-18:00，节假日顺延。紧急问题请拨打 400-000-0000。",
-    )
-
-    samples = {
-        "consult.eml": (
-            "Tom <tom@customer.com>", "关于退货的咨询",
-            "您好，我上周买的产品想退货，请问具体怎么操作？运费谁承担？",
-        ),
-        "spam.eml": (
-            "Promo <promo@bulk-spam.cn>", "恭喜您中奖了！",
-            "恭喜您中奖！立即点击 http://192.168.1.10/win 领取 10000 元现金，限时 24 小时。",
-        ),
-        "billing.eml": (
-            "Finance <finance@partner.com>", "9 月对账单",
-            "附件是 9 月对账单，请核对金额后于本周五前完成付款。",
-        ),
-    }
-
-    service = IngestService(settings, session, runtime)
-    for name, (sender, subject, body) in samples.items():
-        raw = (
-            f"From: {sender}\r\nTo: support@example.com\r\nSubject: {subject}\r\n"
-            f"Message-ID: <demo-{name}@example.com>\r\n"
-            "Content-Type: text/plain; charset=utf-8\r\n\r\n" + body + "\r\n"
-        ).encode("utf-8")
-        outcome = service.ingest_raw(account, raw, uid=str(len(samples)))
-        print(f"{name}: {outcome}")
-
-    print("\n演示数据已就绪，启动服务：")
-    print("  MAILMIND_ENV=dev mailmind serve --port 8080")
-    print("  管理台: http://127.0.0.1:8080/ui/")
-    session.close()
+    print("\n启动服务：")
+    print(f"  mailmind serve --port {args.port}")
+    print(f"  管理台: http://127.0.0.1:{args.port}/ui/")
     return 0
 
 
@@ -151,6 +115,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_train.set_defaults(func=cmd_train)
 
     p_demo = sub.add_parser("demo", help="生成演示数据")
+    p_demo.add_argument("--port", type=int, default=8080, help="仅用于打印访问地址")
     p_demo.set_defaults(func=cmd_demo)
 
     p_ingest = sub.add_parser("ingest", help="导入一封 .eml")
