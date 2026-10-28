@@ -28,8 +28,12 @@ class Settings(BaseSettings):
 
     # ---------- 存储 ----------
     database_url: str = "sqlite+pysqlite:///./var/mailmind.db"
-    storage_backend: Literal["local", "memory"] = "local"
+    storage_backend: Literal["local", "memory", "s3"] = "local"
     storage_root: str = "./var/raw"
+    s3_bucket: str = ""
+    s3_prefix: str = ""
+    s3_endpoint_url: str = ""  # MinIO 等兼容服务
+    s3_region: str = ""
     max_mail_bytes: int = 25 * 1024 * 1024
     max_attachment_bytes: int = 25 * 1024 * 1024
 
