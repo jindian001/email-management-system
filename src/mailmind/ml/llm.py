@@ -33,6 +33,27 @@ class LLMError(RuntimeError):
     pass
 
 
+_HTTP_HINTS = {
+    400: "常见原因：模型名不存在、参数不被支持、或 base_url 与供应商不匹配",
+    401: "检查 MAILMIND_LLM_API_KEY 是否正确/过期",
+    402: "账户余额不足",
+    403: "Key 无权限或未开通该模型",
+    404: "检查 MAILMIND_LLM_BASE_URL（通常需要带 /v1）",
+    429: "触发限流，稍后重试",
+}
+
+
+def _http_error_message(response: Any) -> str:
+    """把服务端返回体带进错误信息——只看 '400 Bad Request' 无法排错。"""
+    try:
+        body = (response.text or "").strip().replace("\n", " ")
+    except Exception:  # noqa: BLE001
+        body = ""
+    hint = _HTTP_HINTS.get(response.status_code, "")
+    suffix = f"（{hint}）" if hint else ""
+    return f"LLM 返回 {response.status_code}{suffix}: {body[:400] or response.reason_phrase}"
+
+
 @dataclass
 class SpamReview:
     is_spam: bool
@@ -255,8 +276,12 @@ class OpenAICompatGateway:
     def _chat(self, system: str, user: str) -> dict[str, Any]:
         if not self.api_key:
             raise LLMError("未配置 MAILMIND_LLM_API_KEY")
+        if self.json_mode:
+            # 部分供应商（如 DeepSeek）要求 prompt 中出现小写 json 才允许 json_object
+            system = f"{system}\n\n请只输出 json 对象，不要输出任何解释文字。"
         payload = self._payload(system, user)
         last_exc: Exception | None = None
+
         for attempt in range(self.retries + 1):
             try:
                 resp = self.client.post(
@@ -264,15 +289,29 @@ class OpenAICompatGateway:
                     headers={"Authorization": f"Bearer {self.api_key}"},
                     json=payload,
                 )
-                resp.raise_for_status()
-                data = resp.json()
-                content = data["choices"][0]["message"]["content"]
-                return _parse_json(content)
-            except Exception as exc:  # noqa: BLE001 - 统一转 LLMError
+            except Exception as exc:  # noqa: BLE001 - 网络层错误，可重试
                 last_exc = exc
                 self.last_error = str(exc)
-                if attempt < self.retries:
-                    time.sleep(min(0.5 * (2**attempt), 2.0))
+            else:
+                if resp.status_code >= 400:
+                    message = _http_error_message(resp)
+                    self.last_error = message
+                    # 4xx（除 429）重试没有意义：直接带上响应体报错，方便定位
+                    if resp.status_code < 500 and resp.status_code != 429:
+                        raise LLMError(message)
+                    last_exc = LLMError(message)
+                else:
+                    try:
+                        data = resp.json()
+                        content = data["choices"][0]["message"]["content"]
+                        return _parse_json(content)
+                    except Exception as exc:  # noqa: BLE001 - 解析失败可重试
+                        last_exc = exc
+                        self.last_error = f"响应解析失败: {exc}"
+
+            if attempt < self.retries:
+                time.sleep(min(0.5 * (2**attempt), 2.0))
+
         raise LLMError(f"LLM 调用失败（已重试 {self.retries} 次）: {last_exc}") from last_exc
 
     def review_spam(self, *, subject: str, body: str, signals: dict[str, Any]) -> SpamReview:

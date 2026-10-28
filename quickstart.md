@@ -141,7 +141,7 @@ export MAILMIND_LLM_JSON_MODE=true
 ```
 
 前者是失败重试次数（默认 1）；后者在服务支持 `response_format=json_object` 时打开，输出更稳。
-模型调用失败（超时/401/返回非 JSON）会自动降级到 template，不会中断收信与回复链路；
+模型调用失败（超时/4xx/5xx/返回非 JSON）会自动降级到 template；4xx 不重试、5xx 与 429 会重试，不会中断收信与回复链路；
 降级原因会出现在 `llm-check` 的 `fallback_error` 和日志 `llm_fallback` 里。
 
 ## 6. 常用命令
@@ -182,7 +182,7 @@ make test
 make lint
 ```
 
-当前基线：**307 passed, 1 skipped**。跳过的是需要真实 PostgreSQL 的用例，配置后可开启：
+当前基线：**310 passed, 1 skipped**。跳过的是需要真实 PostgreSQL 的用例，配置后可开启：
 
 ```bash
 MAILMIND_TEST_PG_URL=postgresql+psycopg://user:pass@localhost:5432/mailmind_test make test
@@ -213,6 +213,7 @@ docker compose up --build
 | `mailmind: command not found` | `source .venv/bin/activate`，或用 `make` |
 | `unrecognized arguments: # ...` / `command not found: #` | 命令带了行内注释，只复制 `#` 之前的部分；或先 `setopt interactive_comments` |
 | 配了 LLM 但仍显示 `template` | 没设 `MAILMIND_LLM_API_KEY`，或 `PROVIDER` 不是 `openai`；先跑 `mailmind llm-check` |
+| `llm-check` 报 400 | 服务端拒绝了请求，**看 `fallback_error` 里的响应体**：`Model Not Exist` 是模型名错；`base_url` 与供应商不匹配；或 JSON mode 不被支持 |
 | `llm-check` 报 401 | API Key 错误/过期，或该服务需要额外的鉴权头 |
 | `llm-check` 报 timeout / connection | `BASE_URL` 写错、本地模型没起、或需要代理 |
 | 报 `model not found` | `MAILMIND_LLM_MODEL` 与服务端实际模型名不一致（Ollama 要带 tag，如 `qwen2.5:7b`） |
