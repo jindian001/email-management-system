@@ -1073,6 +1073,7 @@ MVP 只需证明三件事：① 能稳定收信解析；② 规则+TF-IDF 的 sp
 8. **Gmail 的 history 过期（404）必须当 reset 处理**：否则增量游标永久失效、后续邮件静默漏拉，与 IMAP 的 UIDVALIDITY 变化同等级。
 9. **Graph 的 `sendMail` 不能携带 In-Reply-To/References 等自定义头**：用它发会使回复脱离原会话，因此 Graph 账号统一走 SMTP（Graph 支持 SMTP AUTH），不要为了"统一"而牺牲线程。
 10. **Gmail 的 `raw` 是 base64url 且可能省略 padding**：解码前必须补齐 `=`，否则长邮件偶发解码失败。
+11. **`uv venv` 对已存在的 `.venv` 会直接报错**：`make install` 需写成 `test -d .venv || uv venv .venv`，否则第二次安装就失败。
 
 ### C.3 目录结构（实际）
 

@@ -22,7 +22,7 @@ make migrate                                  # alembic upgrade head
 
 ```bash
 # 1) 环境
-uv venv --python 3.14 .venv
+uv venv .venv
 uv pip install --python .venv/bin/python -e ".[dev]"
 
 # 2) 跑测试（223 个，全部离线，不需要邮箱/网络/Redis）

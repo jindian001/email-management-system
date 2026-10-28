@@ -13,7 +13,7 @@ help:
 	@echo "make train    - 用反馈数据重训模型"
 
 venv:
-	uv venv --python 3.14 .venv
+	@test -d .venv || uv venv .venv
 
 install: venv
 	$(PIP) -e ".[dev]"
