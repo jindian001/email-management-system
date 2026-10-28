@@ -1,0 +1,28 @@
+# 虚拟环境
+.venv/
+venv/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
+
+# 本地数据
+var/
+data/
+*.db
+*.sqlite3
+
+# 环境变量
+.env
+.env.local
+
+# 个人配置 / IDE
+.idea/
+.vscode/
+*.local

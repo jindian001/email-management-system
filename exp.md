@@ -1038,3 +1038,55 @@ MVP 只需证明三件事：① 能稳定收信解析；② 规则+TF-IDF 的 sp
 ---
 
 **结论一句话**：先用"规则 + TF-IDF"把过滤和分类做到可用（2–3 周），用 LLM 只补模糊区和起草回复，把"发出去"这一步永远置于人工审核或严格策略之下——**准确率可以慢慢涨，误杀和乱回复一次就够毁掉信任**。
+
+---
+
+## 附录 C：实现决策与偏差记录（随开发更新）
+
+> 施工中出现的偏差、简化与踩坑统一记录在此，保证"文档 = 事实"。发现假设不成立时先改这里，再改代码。
+
+### C.1 已落地的偏差（v0.1）
+
+| 设计原方案 | 实际落地 | 原因 | 是否可回退 |
+|---|---|---|---|
+| scikit-learn（TF-IDF + LinearSVC/LogReg） | **纯 Python 多项式朴素贝叶斯**（`ml/naive_bayes.py`），字 unigram+bigram | 零额外依赖、训练/推理全确定、可 JSON 序列化、CI 可复现；样本量小时与线性模型差距有限 | 可。`SpamFilter` 只依赖 `predict_proba(text)` 协议 |
+| pgvector 向量列 + HNSW | `kb_documents.embedding` 存 **JSON 数组**，Python 内算余弦 | 兼容 SQLite（测试）与 PG（生产）；万级知识库足够 | 可。`retrieval.py` 只依赖 `embedder.embed()` |
+| BGE-M3 语义 embedding | **确定性 hash 签名投影**（`ml/embeddings.py`） | 离线/无 GPU 可跑，不引推理服务 | 可。换成 BGE-M3 只需实现同一协议 |
+| LLM 默认走真实 API | 默认 `template`：本地确定性生成/复核；`openai` 走 OpenAI 兼容协议（DeepSeek 等） | 测试与离线演示必须可跑，不能依赖网络与密钥 | 可。改环境变量即可 |
+| MinIO / S3 对象存储 | `LocalObjectStore`（按 sha256 寻址）+ `MemoryObjectStore`（测试） | 开发环境无需额外服务；接口按 S3 语义定义 | 可。实现 `put/get/exists` 即可 |
+| React + Vite 管理台 | 无构建静态单页（`src/mailmind/static/index.html`），fetch 调用 REST API | 避免引入 node 构建链；后端可测性优先 | 可。API 契约不变 |
+| imapclient | **stdlib imaplib**（`connectors/imap_connector.py`） | 少一个依赖；UIDVALIDITY/UID 逻辑自持，解析函数可独立单测 | 可 |
+| Celery + Redis 必须常驻 | 默认 `celery_task_always_eager=true`；生产置 false 走 broker | 测试/演示不需要 broker；任务与 service 解耦 | 可 |
+| PostgreSQL 专属类型（CITEXT/ARRAY/JSONB） | 换成 `String/Text/JSON` | 让 SQLite（测试）与 PG（生产）共用一套模型 | 可。生产可加 PG 专属索引 |
+
+### C.2 踩坑记录
+
+1. **`UID n:*` 会回送最后一封**：`last_uid` 大于当前最大 UID 时 IMAP 仍返回最后一封，必须再过滤 `int(uid) > last_uid`。
+2. **UIDVALIDITY 变化必须全量重扫**：服务端重建 UID 空间后增量拉取会静默漏信，`FetchPage.reset` 显式标记。
+3. **发信回环**：自动回复必须带 `Auto-Submitted: auto-replied`；入站判定同时检查 `Auto-Submitted / Precedence / List-Id / List-Unsubscribe / 空 Return-Path`。
+4. **SQLite 的 `DateTime` 不带时区**：应用层统一写 UTC aware datetime，读取时不做本地化假设。
+5. **HTML 正文必须过滤 script/style**：否则 `html_to_text` 会把 JS 当正文喂给模型。
+6. **测试不能依赖真实邮箱/网络/LLM**：外部依赖全部协议注入（`MemoryConnector`、`RecordingSender`、`TemplateGateway`）。
+7. **测试代码不推送**：`tests/` 已加入 `.git/info/exclude`，只在本地产出与运行。
+
+### C.3 目录结构（实际）
+
+```
+src/mailmind/
+├── core/          # 配置、日志
+├── db/            # ORM 模型、会话
+├── connectors/    # IMAP / SMTP / 内存实现
+├── pipeline/      # 解析、归一化、特征、会话归并
+├── ml/            # 分词、NB、规则、垃圾过滤、分类、embedding、LLM、护栏
+├── reply/         # 自动回复策略、检索、生成、发送
+├── services/      # 业务编排（接入、处理链、查询）
+├── tasks/         # Celery 任务
+├── api/           # FastAPI 路由
+├── static/        # 无构建管理台
+└── cli.py         # 命令行入口
+tests/             # 仅本地（不推送）
+```
+
+### C.4 接口对照
+
+REST 路径与 4.9 节保持一致；新增辅助接口（`/api/v1/health`、`/api/v1/accounts/{id}/sync`、`/api/v1/kb/search`）用于联调与验收，共用同一版本前缀。
