@@ -1,0 +1,12 @@
+# 编译产物
+build/
+dist/
+*.class
+*.o
+__pycache__/
+
+# 个人配置文件 / IDE 文件
+.idea/
+.vscode/
+*.local
+.env
