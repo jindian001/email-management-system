@@ -9,6 +9,84 @@
 - 模型：纯 Python TF-IDF + 朴素贝叶斯（零依赖、确定性）+ 规则引擎 + LLM 复核与起草
 - 前端：React 19 + TypeScript + Vite 管理台（源码 `web/`，构建产物由 FastAPI 托管在 `/ui/`）
 
+## 系统工作流程图
+
+```mermaid
+flowchart TB
+    subgraph IN["① 接入"]
+        MAIL["IMAP / Gmail / Graph 邮箱"]
+        PULL["增量拉取<br/>UIDVALIDITY · historyId · receivedDateTime"]
+        RAW["原始 .eml<br/>sha256 内容寻址存储"]
+        MAIL --> PULL --> RAW
+    end
+
+    subgraph PRE["② 解析与特征"]
+        PARSE["MIME 解析<br/>头部解码 · 正文纯文本 · 附件元数据"]
+        THREAD["会话归并<br/>References / In-Reply-To"]
+        FEAT["归一化 + 特征<br/>URL · 发件人信誉 · SPF/DKIM/DMARC"]
+        PARSE --> THREAD --> FEAT
+    end
+
+    subgraph JUDGE["③ 判定"]
+        SPAM{"垃圾级联<br/>规则 → 朴素贝叶斯 → LLM"}
+        PASS["pass 正常投递"]
+        TAG["tag 打标投递"]
+        QUAR["quarantine 隔离区"]
+        CLS["自动分类<br/>规则 → 朴素贝叶斯 → LLM"]
+        SPAM -->|低于 0.70| PASS
+        SPAM -->|0.70 到 0.95| TAG
+        SPAM -->|不低于 0.95| QUAR
+        PASS --> CLS
+        TAG --> CLS
+    end
+
+    subgraph REPLY["④ 自动回复"]
+        POLICY{"回复闸门<br/>类别白名单 · 冷却 · 免打扰<br/>RFC 3834 反回环"}
+        RET["混合检索<br/>BM25 + 向量 → 重排 top5"]
+        DRAFT["LLM / 模板起草<br/>结构化 JSON + citations"]
+        GUARD{"护栏<br/>引用 · PII · 敏感承诺 · 注入"}
+        SEND["发送<br/>In-Reply-To · Auto-Submitted"]
+        REVIEW["人工审核队列"]
+        POLICY -->|通过| RET --> DRAFT --> GUARD
+        GUARD -->|可信且 auto 模式| SEND
+        GUARD -->|需确认| REVIEW
+        REVIEW -->|审核通过| SEND
+    end
+
+    subgraph STATE["存储与闭环"]
+        PG[("PostgreSQL<br/>邮件 · 判定 · 草稿 · 审计")]
+        KB[("知识库<br/>切片 + 向量")]
+        FB["人工反馈"]
+        TRAIN["重训模型<br/>mailmind train"]
+        KB --> RET
+        GUARD --> PG
+        SEND --> PG
+        FB --> TRAIN
+        TRAIN --> SPAM
+    end
+
+    RAW --> PARSE
+    FEAT --> SPAM
+    CLS --> POLICY
+    QUAR -.->|放行并加白名单| CLS
+    UI["React 管理台 / REST API"] --- PG
+```
+
+| 阶段 | 做什么 | 详细说明 |
+|---|---|---|
+| ① 接入 | 增量拉取邮件，原始 EML 按内容哈希落对象存储 | 第 1 节 |
+| ② 解析 | MIME → 结构化字段；正文纯文本化；附件元数据；会话归并 | 第 2 节 |
+| ② 特征 | 归一化/反混淆/URL/PII + 发件人信誉 + 认证结果 | 第 3 节 |
+| ③ 垃圾判定 | 白名单 → 强规则 → 朴素贝叶斯 → 模糊区 LLM → 三档动作 | 第 4 节 |
+| ③ 分类 | 规则 → 朴素贝叶斯 → 低置信度 LLM 兜底 | 第 5 节 |
+| ④ 回复闸门 | RFC 3834 反回环 + 类别白名单 + 冷却 + 免打扰 + 线程深度 | 第 6 节 |
+| ④ 检索 | BM25 + 向量混合召回 → 重排 → top5 知识片段 | 第 7 节 |
+| ④ 起草 | LLM（或模板）生成结构化草稿 → 护栏校验 | 第 8 节 |
+| ④ 发送 | 组装线程头并发送，写审计、占冷却 | 第 9 节 |
+| 闭环 | 状态机、幂等、回放、反馈重训 | 第 10 节 |
+
+> 图是"正常路径"，异常分支（解析失败、发送失败、护栏拒绝）在各节里单独说明。
+
 ## 数据库迁移
 
 ```bash
