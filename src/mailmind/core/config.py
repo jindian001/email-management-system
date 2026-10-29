@@ -69,6 +69,8 @@ class Settings(BaseSettings):
     categories: list[str] = Field(
         default_factory=lambda: [
             "consult",
+            "aftersale",
+            "booking",
             "billing",
             "notice",
             "marketing",

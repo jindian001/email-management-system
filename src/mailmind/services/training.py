@@ -75,15 +75,21 @@ def save_models(settings: Settings, spam: NaiveBayesModel, category: NaiveBayesM
     category.save(model_path(settings, CATEGORY_FILE))
 
 
+def _category_model_stale(model: NaiveBayesModel, categories: list[str]) -> bool:
+    """配置里新增了业务类别、但磁盘上的模型没学过 → 需要重训。"""
+    expected = set(categories) - {"spam", "other"}
+    return bool(expected - set(model.labels))
+
+
 def ensure_models(settings: Settings, train_if_missing: bool = True) -> tuple[
     NaiveBayesModel | None, NaiveBayesModel | None
 ]:
     spam = load_spam_model(settings)
     category = load_category_model(settings)
-    if train_if_missing and (spam is None or category is None):
+    if train_if_missing and (spam is None or category is None or (category is not None and _category_model_stale(category, settings.categories))):
         if spam is None:
             spam = train_spam()
-        if category is None:
+        if category is None or _category_model_stale(category, settings.categories):
             category = train_category(categories=settings.categories)
         try:
             save_models(settings, spam, category)

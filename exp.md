@@ -1075,6 +1075,7 @@ MVP 只需证明三件事：① 能稳定收信解析；② 规则+TF-IDF 的 sp
 10. **Gmail 的 `raw` 是 base64url 且可能省略 padding**：解码前必须补齐 `=`，否则长邮件偶发解码失败。
 11. **`uv venv` 对已存在的 `.venv` 会直接报错**：`make install` 需写成 `test -d .venv || uv venv .venv`，否则第二次安装就失败。
 12. **macOS 默认 zsh 不把 `#` 当注释**（`interactive_comments` 默认关闭）：文档里 `mailmind llm-check   # 说明` 这种行内注释，用户粘贴后会把 `# 说明` 传给 argparse，报 `unrecognized arguments: # ...`。因此命令块一律不带注释，说明放代码块外（已写入 AGENT.md 第 8 条）。
+13. **分类类别必须与自动回复白名单对齐**：`auto_reply_categories` 里出现过 `aftersale/booking` 而 `categories` 没有，导致白名单类别永远产不出来。现在默认类别已补齐，并加了"白名单 ⊆ 类别"与"每类都要有种子样本"的守护测试；升级后旧模型会被自动判定为 stale 并重训。
 
 ### C.3 目录结构（实际）
 
@@ -1130,7 +1131,7 @@ REST 路径与 4.9 节保持一致；新增辅助接口（`/api/v1/health`、`/a
 
 | 项 | 结果 |
 |---|---|
-| 单元 + 集成测试 | **320 passed + 1 skipped**（`make test`，全程离线；跳过项是需真实 PG 的用例，配 `MAILMIND_TEST_PG_URL` 可开启） |
+| 单元 + 集成测试 | **325 passed + 1 skipped**（`make test`，全程离线；跳过项是需真实 PG 的用例，配 `MAILMIND_TEST_PG_URL` 可开启） |
 | 代码规范 | `ruff check src` 全绿 |
 | 垃圾过滤 | 独立小样本（12 spam / 12 ham）：召回 ≥ 0.7、误杀 ≤ 0.25、无正常邮件被隔离 |
 | 自动回复 | 命中知识库才生成草稿；无引用、空回复、PII 泄露一律拒绝；敏感承诺/提示注入转人工 |

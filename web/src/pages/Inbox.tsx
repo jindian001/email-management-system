@@ -9,6 +9,8 @@ import type { Mail, MailPage } from "../types";
 const CATEGORIES = [
   "",
   "consult",
+  "aftersale",
+  "booking",
   "billing",
   "notice",
   "marketing",

@@ -81,4 +81,10 @@ CATEGORY_SEED: list[tuple[str, str]] = [
     ("这次服务体验非常糟糕，希望给一个合理的解释和赔偿方案。", "complaint"),
     ("你们的退款流程太慢了，已经等了三周还没有处理。", "complaint"),
     ("I am very disappointed with the service and would like to file a complaint.", "complaint"),
+    ("机器用了两周出现异响，还在保修期内，怎么申请维修？", "aftersale"),
+    ("收到货有一处划痕，想换一台新的，需要提供什么凭证？", "aftersale"),
+    ("The device stopped working after a week, how do I claim the warranty?", "aftersale"),
+    ("想预约下周三下午上门安装，方便安排一下吗？", "booking"),
+    ("请问这周五能安排一次产品演示吗？我们三个人参加。", "booking"),
+    ("Can we schedule a demo call next Monday morning?", "booking"),
 ]
