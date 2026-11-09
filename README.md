@@ -1,7 +1,8 @@
 # MailMind · 智能邮箱管理系统
 
 邮件 **自动分类**、**垃圾邮件过滤**、**自动回复** 三件套的可运行实现。
-设计依据见 [exp.md](exp.md)（架构、选型、实施步骤、评测方案、实现偏差记录）。
+设计依据见 [exp.md](exp.md)（架构、选型、实施步骤、评测方案、实现偏差记录）；
+需求文档与图示见 [requirements/](requirements/README.md)（需求分析、需求说明书、10 张 UML/流程图）。
 
 - 后端：Python 3.11+ / FastAPI / SQLAlchemy / Celery
 - 接入：IMAP、Gmail API、Microsoft Graph（读取）；SMTP / Gmail API（发送）
