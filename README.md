@@ -149,7 +149,9 @@ curl -s -X POST localhost:8080/api/v1/replies/1/approve \
 
 ## 管理台（`/ui/`）
 
-React + TypeScript + Vite 构建，产物随仓库发布（无需装 node 即可运行）；9 个页面全部走真实 API：
+React + TypeScript + Vite 构建，产物随仓库发布（无需装 node 即可运行）；9 个页面全部走真实 API。
+界面为**深色科幻 HUD 风格**：霓虹青/品红配色、网格背景、顶栏扫描线、卡片角标、等宽字体数据区，
+纯 CSS 实现（无 UI 库依赖），并适配 `prefers-reduced-motion`。
 
 | 页面 | 能力 |
 |---|---|

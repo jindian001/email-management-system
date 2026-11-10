@@ -76,7 +76,13 @@ export default function App() {
   return (
     <>
       <div className="topbar">
-        <h1>MailMind</h1>
+        <div className="brand">
+          <span className="brand-mark">◈</span>
+          <div>
+            <h1>MailMind</h1>
+            <div className="brand-sub">MAIL OPS CONSOLE</div>
+          </div>
+        </div>
         <Badge>
           {health.data
             ? `LLM: ${health.data.llm_provider} · 回复: ${health.data.auto_reply_mode}`
